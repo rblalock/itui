@@ -7,7 +7,7 @@ import type { ChatRow } from "../api/types.ts";
  *
  * Each row is exactly 2 lines tall:
  *   Line 1:  [avatar] Name                   9:48a
- *   Line 2:           +1 (904) 502-4820          ← only if no name; otherwise blank
+ *   Line 2:           +1 (555) 012-3456          ← only if no name; otherwise blank
  *
  * When a resolved name exists the handle is hidden entirely — it's redundant information
  * and was causing ugly wrapping in the previous layout. The unread dot sits in the avatar

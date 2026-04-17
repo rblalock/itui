@@ -11,15 +11,15 @@ const GROUP_WINDOW_MS = 5 * 60 * 1000;
  * Messages from the same sender within a 5-minute window are grouped together:
  *
  *   ┌─────────────────────────┐
- *   │ Jess 💕                 │   ← sender header, only on first in group
- *   │ Beef and broccoli ?     │
- *   │ Did you get a rice       │
- *   │ cooker                  │   ← multiple bubbles stacked tight
+ *   │ Alex                    │   ← sender header, only on first in group
+ *   │ Want to grab dinner?    │
+ *   │ Maybe that new place    │
+ *   │ downtown                │   ← multiple bubbles stacked tight
  *   │ 3:10 PM                 │   ← timestamp only on last in group
  *   └─────────────────────────┘
  *
- * This keeps the screen from being drowned in "Jess 💕" labels and `PM`s while still
- * giving you a clear "who/when" signal at the boundaries of every conversation run.
+ * This keeps the screen from being drowned in repeated sender labels and timestamps
+ * while still giving you a clear "who/when" signal at the boundaries of every run.
  */
 export function ConversationView({
   chat,

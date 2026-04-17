@@ -3,13 +3,13 @@
 iMessage in your terminal. Run the server on your Mac, connect from anywhere.
 
 ```
-┌─ Chats ─────────────────────┐┌──────────── jess 💕 · +13214808737 ───────────┐
-│ ● jess 💕            9:48a  ││                  ── Today ──                   │
-│   Joe Vogel           9:41a ││                                                │
-│   Poke 🌴            9:16a ││  Beef and broccoli tonight ?                   │
-│   Exi                 7:20a ││  Did you get a rice cooker                     │
-│   Sequence            3:25a ││  3:10 PM                                       │
-│                             ││                          Yeah sounds great     │
+┌─ Chats ─────────────────────┐┌────────────────── Alex ───────────────────────┐
+│ ● Alex                9:48a ││                  ── Today ──                   │
+│   Mom                  9:41a ││                                                │
+│   Work Chat           9:16a ││  Want to grab dinner tonight?                  │
+│   Sam                  7:20a ││  3:10 PM                                       │
+│   Reminders           3:25a ││                                                │
+│                             ││                            Sure, sounds good   │
 │                             ││                                    3:10 PM     │
 │                             │├────────────────────────────────────────────────┤
 │                             ││ › Message · Enter to send                      │
