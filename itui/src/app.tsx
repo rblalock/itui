@@ -100,22 +100,8 @@ export function App({ config }: { config: Config }) {
     });
   }, [selected?.id]);
 
-  // Terminal focus tracking. Modern terminals (Ghostty, Alacritty, Kitty, iTerm2)
-  // send \x1b[I (focus gained) and \x1b[O (focus lost) when focus reporting is
-  // enabled — OpenTUI already enables this via \x1b[?1004h. We listen on stdin
-  // for these sequences so we know whether the user is actually looking at itui.
-  // When unfocused, ALL incoming messages trigger a notification (even the active
-  // chat), because the user isn't seeing them.
+  // Terminal focus tracking. Detected inside useKeyboard since OpenTUI owns stdin.
   const terminalFocusedRef = useRef(true);
-  useEffect(() => {
-    const onData = (data: Buffer) => {
-      const str = data.toString();
-      if (str.includes("\x1b[I")) terminalFocusedRef.current = true;
-      if (str.includes("\x1b[O")) terminalFocusedRef.current = false;
-    };
-    process.stdin.on("data", onData);
-    return () => { process.stdin.off("data", onData); };
-  }, []);
 
   // SSE subscription. Single long-lived stream across all chats.
   const selectedChatIdRef = useRef<number | null>(null);
@@ -193,6 +179,30 @@ export function App({ config }: { config: Config }) {
   // ----- Keyboard -----
 
   useKeyboard((key) => {
+    // Terminal focus reporting: OpenTUI enables \x1b[?1004h, so the terminal sends
+    // \x1b[I (focus in) and \x1b[O (focus out) as key events. Detect them here
+    // since OpenTUI owns stdin and external listeners can't see these sequences.
+    const seq = key.sequence ?? "";
+    if (seq.includes("\x1b[I") || key.name === "focus") {
+      terminalFocusedRef.current = true;
+      return;
+    }
+    if (seq.includes("\x1b[O") || key.name === "blur") {
+      terminalFocusedRef.current = false;
+      return;
+    }
+
+    // Ctrl+Shift+N: test notification (debug). Fires a fake notification so you can
+    // confirm notify-send / osascript works without waiting for a real message.
+    if (key.ctrl && key.shift && key.name === "n") {
+      notifyNewMessage(
+        config,
+        { id: 0, chat_id: 0, guid: "", sender: "", is_from_me: false, text: "Test notification from itui", created_at: new Date().toISOString(), attachments: [], reactions: [] },
+        "itui test",
+      );
+      return;
+    }
+
     if (key.ctrl && key.name === "c") {
       if (focus === "composer") {
         if (composer.length > 0) {
