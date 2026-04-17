@@ -18,6 +18,7 @@ func durationParserHandlesUnits() {
 @Test
 func attachmentDisplayPrefersTransferName() {
   let meta = AttachmentMeta(
+    rowID: 1,
     filename: "file.dat",
     transferName: "friendly.dat",
     uti: "",
@@ -29,6 +30,7 @@ func attachmentDisplayPrefersTransferName() {
   )
   #expect(displayName(for: meta) == "friendly.dat")
   let fallback = AttachmentMeta(
+    rowID: 2,
     filename: "file.dat",
     transferName: "",
     uti: "",
@@ -40,6 +42,7 @@ func attachmentDisplayPrefersTransferName() {
   )
   #expect(displayName(for: fallback) == "file.dat")
   let unknown = AttachmentMeta(
+    rowID: 3,
     filename: "",
     transferName: "",
     uti: "",
@@ -88,6 +91,7 @@ func outputModelsEncodeExpectedKeys() throws {
     destinationCallerID: "me@icloud.com"
   )
   let attachment = AttachmentMeta(
+    rowID: 42,
     filename: "file.dat",
     transferName: "",
     uti: "public.data",

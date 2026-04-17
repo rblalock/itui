@@ -8,9 +8,10 @@ func chatPayload(
   name: String,
   service: String,
   lastMessageAt: Date,
-  participants: [String]
+  participants: [String],
+  participantsResolved: [ResolvedContact]? = nil
 ) -> [String: Any] {
-  return [
+  var payload: [String: Any] = [
     "id": id,
     "identifier": identifier,
     "guid": guid,
@@ -20,6 +21,10 @@ func chatPayload(
     "participants": participants,
     "is_group": isGroupHandle(identifier: identifier, guid: guid),
   ]
+  if let resolved = participantsResolved {
+    payload["participants_resolved"] = resolved.map { resolvedContactDictionary($0) }
+  }
+  return payload
 }
 
 func messagePayload(
@@ -27,12 +32,18 @@ func messagePayload(
   chatInfo: ChatInfo?,
   participants: [String],
   attachments: [AttachmentMeta],
-  reactions: [Reaction]
+  reactions: [Reaction],
+  senderContact: ResolvedContact? = nil
 ) throws -> [String: Any] {
   let identifier = chatInfo?.identifier ?? ""
   let guid = chatInfo?.guid ?? ""
   let name = chatInfo?.name ?? ""
-  let core = MessagePayload(message: message, attachments: attachments, reactions: reactions)
+  let core = MessagePayload(
+    message: message,
+    attachments: attachments,
+    reactions: reactions,
+    senderContact: senderContact
+  )
   var payload = try core.asDictionary()
   payload["chat_identifier"] = identifier
   payload["chat_guid"] = guid
@@ -42,8 +53,24 @@ func messagePayload(
   return payload
 }
 
+func resolvedContactDictionary(_ contact: ResolvedContact) -> [String: Any] {
+  var out: [String: Any] = [
+    "handle": contact.handle,
+    "initials": contact.initials,
+    "has_avatar": contact.hasAvatar,
+    "avatar_bytes": contact.avatarBytes,
+  ]
+  if let name = contact.name { out["name"] = name }
+  if let mime = contact.avatarMime { out["avatar_mime"] = mime }
+  if let path = contact.avatarPath { out["avatar_path"] = path }
+  if let url = contact.avatarURL { out["avatar_url"] = url }
+  if let b64 = contact.avatarBase64 { out["avatar_base64"] = b64 }
+  return out
+}
+
 func attachmentPayload(_ meta: AttachmentMeta) -> [String: Any] {
   return [
+    "id": meta.rowID,
     "filename": meta.filename,
     "transfer_name": meta.transferName,
     "uti": meta.uti,

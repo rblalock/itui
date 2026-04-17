@@ -12,6 +12,7 @@ final class RPCServer {
   let watcher: MessageWatcher
   let output: RPCOutput
   let cache: ChatCache
+  let contactResolver: ContactResolver
   let subscriptions = SubscriptionStore()
   let verbose: Bool
   let sendMessage: (MessageSendOptions) throws -> Void
@@ -20,11 +21,13 @@ final class RPCServer {
     store: MessageStore,
     verbose: Bool,
     output: RPCOutput = RPCWriter(),
+    contactResolver: ContactResolver? = nil,
     sendMessage: @escaping (MessageSendOptions) throws -> Void = { try MessageSender().send($0) }
   ) {
     self.store = store
     self.watcher = MessageWatcher(store: store)
     self.cache = ChatCache(store: store)
+    self.contactResolver = contactResolver ?? ContactResolver()
     self.verbose = verbose
     self.output = output
     self.sendMessage = sendMessage
@@ -88,6 +91,10 @@ final class RPCServer {
         try await handleWatchUnsubscribe(id: id, params: params)
       case "send":
         try await handleSend(params: params, id: id)
+      case "contacts.list":
+        try await handleContactsList(id: id, params: params)
+      case "contacts.resolve":
+        try await handleContactsResolve(id: id, params: params)
       default:
         output.sendError(id: id, error: RPCError.methodNotFound(method))
       }

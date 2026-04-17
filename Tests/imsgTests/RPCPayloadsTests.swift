@@ -54,6 +54,7 @@ func messagePayloadIncludesChatFields() throws {
     service: "iMessage"
   )
   let attachment = AttachmentMeta(
+    rowID: 77,
     filename: "file.dat",
     transferName: "file.dat",
     uti: "public.data",

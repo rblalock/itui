@@ -1,6 +1,9 @@
 import Foundation
 import IMsgCore
 
+/// JSON representation of a chat row in the CLI. Enriched forms with resolved contacts
+/// live in `ChatListPayload`, which is used by the HTTP server and can also be emitted by
+/// the CLI when `--contacts` is set.
 struct ChatPayload: Codable {
   let id: Int64
   let name: String
@@ -49,7 +52,17 @@ struct MessagePayload: Codable {
   let isReactionAdd: Bool?
   let reactedToGUID: String?
 
-  init(message: Message, attachments: [AttachmentMeta], reactions: [Reaction] = []) {
+  /// Contact data for the sender, populated by the HTTP/WS/RPC layer (always on) or the
+  /// CLI when `--contacts` is supplied. Nil for API clients when enrichment is opted out.
+  let senderContact: ResolvedContact?
+
+  init(
+    message: Message,
+    attachments: [AttachmentMeta],
+    reactions: [Reaction] = [],
+    senderContact: ResolvedContact? = nil,
+    attachmentURLBuilder: ((Int64) -> String?)? = nil
+  ) {
     self.id = message.rowID
     self.chatID = message.chatID
     self.guid = message.guid
@@ -59,9 +72,12 @@ struct MessagePayload: Codable {
     self.isFromMe = message.isFromMe
     self.text = message.text
     self.createdAt = CLIISO8601.format(message.date)
-    self.attachments = attachments.map { AttachmentPayload(meta: $0) }
+    self.attachments = attachments.map {
+      AttachmentPayload(meta: $0, url: attachmentURLBuilder?($0.rowID))
+    }
     self.reactions = reactions.map { ReactionPayload(reaction: $0) }
     self.destinationCallerID = message.destinationCallerID
+    self.senderContact = senderContact
 
     // Reaction event metadata
     if message.isReaction {
@@ -97,6 +113,7 @@ struct MessagePayload: Codable {
     case reactionEmoji = "reaction_emoji"
     case isReactionAdd = "is_reaction_add"
     case reactedToGUID = "reacted_to_guid"
+    case senderContact = "sender_contact"
   }
 }
 
@@ -140,6 +157,7 @@ struct ReactionPayload: Codable {
 }
 
 struct AttachmentPayload: Codable {
+  let id: Int64
   let filename: String
   let transferName: String
   let uti: String
@@ -148,8 +166,17 @@ struct AttachmentPayload: Codable {
   let isSticker: Bool
   let originalPath: String
   let missing: Bool
+  /// HTTP URL pointing at the streaming endpoint (`/api/attachments/:id`). Populated only
+  /// when the payload is produced by the embedded web server so other surfaces (CLI, RPC
+  /// over stdio) leave it nil and clients fall back to `original_path`.
+  let attachmentURL: String?
 
   init(meta: AttachmentMeta) {
+    self.init(meta: meta, url: nil)
+  }
+
+  init(meta: AttachmentMeta, url: String?) {
+    self.id = meta.rowID
     self.filename = meta.filename
     self.transferName = meta.transferName
     self.uti = meta.uti
@@ -158,9 +185,11 @@ struct AttachmentPayload: Codable {
     self.isSticker = meta.isSticker
     self.originalPath = meta.originalPath
     self.missing = meta.missing
+    self.attachmentURL = url
   }
 
   enum CodingKeys: String, CodingKey {
+    case id
     case filename = "filename"
     case transferName = "transfer_name"
     case uti = "uti"
@@ -169,6 +198,51 @@ struct AttachmentPayload: Codable {
     case isSticker = "is_sticker"
     case originalPath = "original_path"
     case missing = "missing"
+    case attachmentURL = "attachment_url"
+  }
+}
+
+/// Chat row as delivered to HTTP/RPC clients. `participantsResolved` is only populated on
+/// API surfaces (HTTP, WebSocket, RPC) that auto-enrich, or on the CLI `chats` command
+/// when `--contacts` is set.
+struct ChatListPayload: Codable {
+  let id: Int64
+  let name: String
+  let identifier: String
+  let guid: String
+  let service: String
+  let lastMessageAt: String
+  let participants: [String]
+  let isGroup: Bool
+  let participantsResolved: [ResolvedContact]?
+
+  init(
+    id: Int64,
+    name: String,
+    identifier: String,
+    guid: String,
+    service: String,
+    lastMessageAt: String,
+    participants: [String],
+    isGroup: Bool,
+    participantsResolved: [ResolvedContact]? = nil
+  ) {
+    self.id = id
+    self.name = name
+    self.identifier = identifier
+    self.guid = guid
+    self.service = service
+    self.lastMessageAt = lastMessageAt
+    self.participants = participants
+    self.isGroup = isGroup
+    self.participantsResolved = participantsResolved
+  }
+
+  enum CodingKeys: String, CodingKey {
+    case id, name, identifier, guid, service, participants
+    case lastMessageAt = "last_message_at"
+    case isGroup = "is_group"
+    case participantsResolved = "participants_resolved"
   }
 }
 

@@ -1,0 +1,40 @@
+{
+  "name": "itui",
+  "version": "0.1.0",
+  "description": "A terminal UI for iMessage. Connects to an `imsg serve` endpoint running on your Mac.",
+  "type": "module",
+  "bin": {
+    "itui": "./src/cli.tsx"
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "scripts": {
+    "dev": "bun run src/cli.tsx",
+    "start": "bun run src/cli.tsx",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "imessage",
+    "tui",
+    "terminal",
+    "opentui",
+    "macos",
+    "messages"
+  ],
+  "license": "MIT",
+  "engines": {
+    "bun": ">=1.0.0"
+  },
+  "dependencies": {
+    "@opentui/core": "^0.1.100",
+    "@opentui/react": "^0.1.100",
+    "react": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "typescript": "^5.5.0"
+  }
+}

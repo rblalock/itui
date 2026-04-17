@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>imsg — Contacts Debug</title>
+  <style>
+    :root {
+      --bg: #0b0d11;
+      --surface: #15181e;
+      --surface-2: #1c2027;
+      --border: #2a2f38;
+      --text: #e7eaf0;
+      --muted: #8890a0;
+      --accent: #3b82f6;
+      --ok: #22c55e;
+      --warn: #f59e0b;
+      --err: #ef4444;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 14px/1.5 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    header {
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      background: var(--surface);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    header h1 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 600;
+    }
+    .badge {
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 500;
+      background: var(--surface-2);
+      color: var(--muted);
+    }
+    .badge.ok { background: rgba(34, 197, 94, 0.15); color: var(--ok); }
+    .badge.warn { background: rgba(245, 158, 11, 0.15); color: var(--warn); }
+    .badge.err { background: rgba(239, 68, 68, 0.15); color: var(--err); }
+    main {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      padding: 16px 24px;
+    }
+    section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      min-width: 0;
+    }
+    section h2 {
+      margin: 0 0 12px;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .span-2 { grid-column: span 2; }
+    input, button, select {
+      background: var(--surface-2);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 12px;
+      font: inherit;
+    }
+    input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+    button {
+      cursor: pointer;
+      font-weight: 500;
+    }
+    button:hover { background: #23293 2; border-color: #3a4150; }
+    button.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+    button.primary:hover { background: #2563eb; border-color: #2563eb; }
+    .row { display: flex; gap: 8px; align-items: center; }
+    .row > input { flex: 1; }
+    .muted { color: var(--muted); font-size: 12px; }
+    .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; }
+
+    /* Contact card */
+    .card {
+      display: grid;
+      grid-template-columns: 88px 1fr;
+      gap: 16px;
+      padding: 16px;
+      background: var(--surface-2);
+      border-radius: 10px;
+      border: 1px solid var(--border);
+    }
+    .card .avatar {
+      width: 88px;
+      height: 88px;
+      border-radius: 50%;
+      background: var(--border);
+      object-fit: cover;
+      display: block;
+    }
+    .card .info { min-width: 0; }
+    .card .info h3 {
+      margin: 0 0 4px;
+      font-size: 18px;
+      font-weight: 600;
+    }
+    .kv {
+      display: grid;
+      grid-template-columns: 110px 1fr;
+      gap: 4px 12px;
+      font-size: 12px;
+      word-break: break-all;
+    }
+    .kv dt { color: var(--muted); }
+    .kv dd { margin: 0; }
+
+    /* Initials fallback */
+    .initials {
+      width: 88px;
+      height: 88px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+      color: white;
+      font-weight: 600;
+      font-size: 28px;
+    }
+    .initials.sm { width: 32px; height: 32px; font-size: 12px; }
+
+    /* Contacts grid */
+    .contacts-toolbar {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .contacts-toolbar input { flex: 1; }
+    .contacts-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 8px;
+      max-height: 600px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+    .contact-chip {
+      display: grid;
+      grid-template-columns: 40px 1fr;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      background: var(--surface-2);
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      min-width: 0;
+    }
+    .contact-chip img, .contact-chip .initials {
+      width: 40px; height: 40px; border-radius: 50%; font-size: 14px;
+    }
+    .contact-chip .name { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .contact-chip .handle { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    /* Chats */
+    .chat-row {
+      padding: 12px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-bottom: 8px;
+      cursor: pointer;
+      transition: border-color 0.12s;
+    }
+    .chat-row:hover { border-color: var(--accent); }
+    .chat-row.selected { border-color: var(--accent); background: rgba(59, 130, 246, 0.08); }
+    .chat-row .chat-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+    .participants {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .participant-chip {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 10px 3px 3px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      font-size: 12px;
+    }
+    .participant-chip img, .participant-chip .initials {
+      width: 22px; height: 22px; border-radius: 50%; font-size: 9px;
+    }
+
+    /* Messages */
+    .message {
+      display: grid;
+      grid-template-columns: 36px 1fr;
+      gap: 10px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .message:last-child { border-bottom: none; }
+    .message img, .message .initials {
+      width: 36px; height: 36px; border-radius: 50%; font-size: 12px;
+    }
+    .message .body .meta {
+      display: flex;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .message .body .text { margin-top: 2px; white-space: pre-wrap; }
+    .message .body .name { color: var(--text); font-weight: 500; }
+
+    /* Stats row */
+    .stats {
+      display: flex;
+      gap: 24px;
+      padding: 12px 16px;
+      background: var(--surface-2);
+      border-radius: 8px;
+      margin-bottom: 12px;
+    }
+    .stat .value { font-size: 22px; font-weight: 600; }
+    .stat .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+
+    .empty { color: var(--muted); padding: 24px; text-align: center; }
+    .pill { padding: 2px 8px; border-radius: 999px; font-size: 11px; background: var(--surface); border: 1px solid var(--border); }
+    .pill.has-avatar { background: rgba(34, 197, 94, 0.15); color: var(--ok); border-color: transparent; }
+    .pill.no-avatar { background: rgba(239, 68, 68, 0.1); color: var(--err); border-color: transparent; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>imsg · contacts debug</h1>
+    <span id="auth-badge" class="badge">auth: …</span>
+    <span id="base-badge" class="badge mono"></span>
+    <div style="flex:1"></div>
+    <button id="refresh-btn" class="primary">Refresh all</button>
+  </header>
+
+  <main>
+    <!-- Resolve one -->
+    <section>
+      <h2>Resolve a handle</h2>
+      <p class="muted">Try a phone number (E.164: <span class="mono">+15551234567</span>) or an email. This hits <span class="mono">/api/contacts/resolve?handle=…&amp;inline_avatar=1</span>.</p>
+      <div class="row" style="margin-bottom: 12px;">
+        <input id="resolve-input" placeholder="+15551234567 or name@example.com" autofocus>
+        <button id="resolve-btn" class="primary">Resolve</button>
+      </div>
+      <div id="resolve-result"></div>
+    </section>
+
+    <!-- Summary -->
+    <section>
+      <h2>Overview</h2>
+      <div id="stats" class="stats">
+        <div class="stat"><div class="value" id="stat-total">–</div><div class="label">Total contacts</div></div>
+        <div class="stat"><div class="value" id="stat-avatars">–</div><div class="label">With avatars</div></div>
+        <div class="stat"><div class="value" id="stat-chats">–</div><div class="label">Chats loaded</div></div>
+      </div>
+      <p class="muted">All API endpoints used on this page:</p>
+      <ul class="mono" style="font-size:12px; color: var(--muted); line-height: 1.8; margin: 0; padding-left: 18px;">
+        <li>GET /api/contacts</li>
+        <li>GET /api/contacts/resolve?handle=…</li>
+        <li>GET /api/contacts/avatar?handle=…</li>
+        <li>GET /api/chats?limit=20</li>
+        <li>GET /api/chats/:id/messages?limit=30</li>
+      </ul>
+    </section>
+
+    <!-- Contacts grid -->
+    <section class="span-2">
+      <h2>All contacts</h2>
+      <div class="contacts-toolbar">
+        <input id="contact-search" placeholder="Filter by name or handle">
+        <label class="row muted"><input type="checkbox" id="only-avatars"> only with avatars</label>
+      </div>
+      <div id="contacts-grid" class="contacts-grid">
+        <div class="empty">Loading contacts…</div>
+      </div>
+    </section>
+
+    <!-- Chats -->
+    <section>
+      <h2>Chats</h2>
+      <p class="muted">Click a chat to preview its messages with resolved senders.</p>
+      <div id="chat-list"></div>
+    </section>
+
+    <!-- Messages -->
+    <section>
+      <h2>Messages preview</h2>
+      <div id="messages-preview">
+        <div class="empty">Select a chat on the left</div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const qs = (s, el = document) => el.querySelector(s);
+
+    const state = {
+      contacts: [],
+      chats: [],
+      selectedChatID: null,
+    };
+
+    function initialsFallback(initials, size = 'lg') {
+      const el = document.createElement('div');
+      el.className = 'initials' + (size === 'sm' ? ' sm' : '');
+      el.textContent = initials || '?';
+      return el;
+    }
+
+    function avatarNode(contact, size = 'lg') {
+      if (contact && contact.has_avatar && contact.avatar_url) {
+        const img = new Image();
+        img.src = contact.avatar_url;
+        img.alt = contact.name || contact.handle;
+        // Fall back to initials if the avatar can't load.
+        img.onerror = () => {
+          const fallback = initialsFallback(contact.initials, size);
+          img.replaceWith(fallback);
+        };
+        if (size === 'sm') img.classList.add('sm');
+        return img;
+      }
+      return initialsFallback(contact ? contact.initials : '?', size);
+    }
+
+    async function fetchJSON(path) {
+      const res = await fetch(path);
+      if (!res.ok) throw new Error(`${path} — HTTP ${res.status}`);
+      return res.json();
+    }
+
+    // --- Resolve one handle ---
+    async function resolveHandle() {
+      const handle = qs('#resolve-input').value.trim();
+      const dest = qs('#resolve-result');
+      if (!handle) {
+        dest.innerHTML = '';
+        return;
+      }
+      dest.innerHTML = '<div class="empty">Resolving…</div>';
+      try {
+        const data = await fetchJSON(`/api/contacts/resolve?handle=${encodeURIComponent(handle)}&inline_avatar=1`);
+        const c = data.contact;
+        dest.innerHTML = '';
+
+        const card = document.createElement('div');
+        card.className = 'card';
+        const avatar = avatarNode(c);
+        if (avatar.tagName === 'IMG') avatar.className = 'avatar';
+        card.appendChild(avatar);
+
+        const info = document.createElement('div');
+        info.className = 'info';
+        info.innerHTML = `
+          <h3>${escapeHTML(c.name || '(no name)')}</h3>
+          <div class="muted mono">${escapeHTML(c.handle)}</div>
+          <dl class="kv" style="margin-top: 12px;">
+            <dt>initials</dt><dd class="mono">${escapeHTML(c.initials || '(empty)')}</dd>
+            <dt>has_avatar</dt><dd>${c.has_avatar ? '<span class="pill has-avatar">yes</span>' : '<span class="pill no-avatar">no</span>'}</dd>
+            ${c.has_avatar ? `
+              <dt>avatar_mime</dt><dd class="mono">${escapeHTML(c.avatar_mime)}</dd>
+              <dt>avatar_bytes</dt><dd>${c.avatar_bytes.toLocaleString()} B</dd>
+              <dt>avatar_url</dt><dd class="mono">${escapeHTML(c.avatar_url)}</dd>
+              <dt>avatar_path</dt><dd class="mono">${escapeHTML(c.avatar_path)}</dd>
+              <dt>avatar_base64</dt><dd class="mono">${c.avatar_base64 ? c.avatar_base64.slice(0, 60) + '… (' + c.avatar_base64.length + ' chars)' : 'null'}</dd>
+            ` : ''}
+          </dl>
+        `;
+        card.appendChild(info);
+        dest.appendChild(card);
+      } catch (e) {
+        dest.innerHTML = `<div class="empty">Error: ${escapeHTML(e.message)}</div>`;
+      }
+    }
+
+    // --- Load contacts list ---
+    async function loadContacts() {
+      const grid = qs('#contacts-grid');
+      grid.innerHTML = '<div class="empty">Loading contacts…</div>';
+      try {
+        const data = await fetchJSON('/api/contacts');
+        state.contacts = data.contacts;
+        const badge = qs('#auth-badge');
+        badge.textContent = `auth: ${data.authorization}`;
+        badge.className = 'badge ' + (data.authorization === 'authorized' ? 'ok' : data.authorization === 'denied' || data.authorization === 'restricted' ? 'err' : 'warn');
+        qs('#stat-total').textContent = data.contacts.length.toLocaleString();
+        qs('#stat-avatars').textContent = data.contacts.filter(c => c.has_avatar).length.toLocaleString();
+        renderContacts();
+      } catch (e) {
+        grid.innerHTML = `<div class="empty">Error: ${escapeHTML(e.message)}</div>`;
+      }
+    }
+
+    function renderContacts() {
+      const grid = qs('#contacts-grid');
+      const filter = qs('#contact-search').value.trim().toLowerCase();
+      const onlyAvatars = qs('#only-avatars').checked;
+      const list = state.contacts.filter(c => {
+        if (onlyAvatars && !c.has_avatar) return false;
+        if (!filter) return true;
+        return (c.name || '').toLowerCase().includes(filter)
+          || c.handle.toLowerCase().includes(filter);
+      });
+      if (!list.length) {
+        grid.innerHTML = '<div class="empty">No matches</div>';
+        return;
+      }
+      grid.innerHTML = '';
+      for (const c of list.slice(0, 400)) { // cap for DOM performance
+        const chip = document.createElement('div');
+        chip.className = 'contact-chip';
+        const avatar = avatarNode(c, 'sm');
+        chip.appendChild(avatar);
+        const info = document.createElement('div');
+        info.style.minWidth = '0';
+        info.innerHTML = `
+          <div class="name">${escapeHTML(c.name || '(no name)')}</div>
+          <div class="handle">${escapeHTML(c.handle)}</div>
+        `;
+        chip.appendChild(info);
+        grid.appendChild(chip);
+      }
+      if (list.length > 400) {
+        const more = document.createElement('div');
+        more.className = 'empty';
+        more.textContent = `… ${list.length - 400} more hidden. Narrow your filter to see them.`;
+        grid.appendChild(more);
+      }
+    }
+
+    // --- Load chats ---
+    async function loadChats() {
+      const list = qs('#chat-list');
+      list.innerHTML = '<div class="empty">Loading chats…</div>';
+      try {
+        const data = await fetchJSON('/api/chats?limit=20');
+        state.chats = data.chats;
+        qs('#stat-chats').textContent = data.chats.length.toLocaleString();
+        list.innerHTML = '';
+        for (const chat of data.chats) {
+          const row = document.createElement('div');
+          row.className = 'chat-row';
+          row.dataset.id = chat.id;
+          const title = chat.name || chat.participants_resolved?.map(p => p.name || p.handle).join(', ') || chat.identifier;
+          row.innerHTML = `
+            <div class="chat-header">
+              <div>
+                <div style="font-weight: 500;">${escapeHTML(title)}</div>
+                <div class="muted mono">${escapeHTML(chat.identifier)}${chat.is_group ? ' · group' : ''}</div>
+              </div>
+              <div class="muted" style="font-size: 11px;">${new Date(chat.last_message_at).toLocaleString()}</div>
+            </div>
+          `;
+          const parts = document.createElement('div');
+          parts.className = 'participants';
+          for (const p of chat.participants_resolved || []) {
+            const chip = document.createElement('div');
+            chip.className = 'participant-chip';
+            chip.appendChild(avatarNode(p, 'sm'));
+            const label = document.createElement('span');
+            label.textContent = p.name || p.handle;
+            chip.appendChild(label);
+            parts.appendChild(chip);
+          }
+          if (parts.children.length) row.appendChild(parts);
+          row.addEventListener('click', () => selectChat(chat.id));
+          list.appendChild(row);
+        }
+      } catch (e) {
+        list.innerHTML = `<div class="empty">Error: ${escapeHTML(e.message)}</div>`;
+      }
+    }
+
+    async function selectChat(id) {
+      state.selectedChatID = id;
+      for (const row of document.querySelectorAll('.chat-row')) {
+        row.classList.toggle('selected', Number(row.dataset.id) === id);
+      }
+      const dest = qs('#messages-preview');
+      dest.innerHTML = '<div class="empty">Loading messages…</div>';
+      try {
+        const data = await fetchJSON(`/api/chats/${id}/messages?limit=30`);
+        dest.innerHTML = '';
+        if (!data.messages.length) {
+          dest.innerHTML = '<div class="empty">No messages</div>';
+          return;
+        }
+        for (const m of data.messages) {
+          const row = document.createElement('div');
+          row.className = 'message';
+          row.appendChild(avatarNode(m.sender_contact, 'sm'));
+          const body = document.createElement('div');
+          body.className = 'body';
+          const name = m.sender_contact?.name || m.sender || 'Me';
+          body.innerHTML = `
+            <div class="meta">
+              <span class="name">${m.is_from_me ? 'You' : escapeHTML(name)}</span>
+              <span>${new Date(m.created_at).toLocaleString()}</span>
+              ${m.is_from_me ? '<span class="pill">sent</span>' : '<span class="pill">recv</span>'}
+            </div>
+            <div class="text">${escapeHTML(m.text || '(no text)')}</div>
+          `;
+          row.appendChild(body);
+          dest.appendChild(row);
+        }
+      } catch (e) {
+        dest.innerHTML = `<div class="empty">Error: ${escapeHTML(e.message)}</div>`;
+      }
+    }
+
+    // --- Helpers ---
+    function escapeHTML(s) {
+      return String(s ?? '').replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+      }[c]));
+    }
+
+    // --- Wire up ---
+    qs('#resolve-btn').addEventListener('click', resolveHandle);
+    qs('#resolve-input').addEventListener('keydown', e => { if (e.key === 'Enter') resolveHandle(); });
+    qs('#contact-search').addEventListener('input', renderContacts);
+    qs('#only-avatars').addEventListener('change', renderContacts);
+    qs('#refresh-btn').addEventListener('click', () => {
+      loadContacts();
+      loadChats();
+      if (state.selectedChatID) selectChat(state.selectedChatID);
+    });
+
+    qs('#base-badge').textContent = location.origin;
+    loadContacts();
+    loadChats();
+  </script>
+</body>
+</html>

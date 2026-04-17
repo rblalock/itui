@@ -31,12 +31,13 @@ enum WatchCommand {
             label: "reactions", names: [.long("reactions")],
             help: "include reaction events (tapback add/remove) in the stream"
           ),
-        ]
+        ] + CommandSignatures.contactFlags()
       )
     ),
     usageExamples: [
       "imsg watch --chat-id 1 --attachments --debounce 250ms",
       "imsg watch --chat-id 1 --participants +15551234567",
+      "imsg watch --chat-id 1 --contacts --json",
     ]
   ) { values, runtime in
     try await run(values: values, runtime: runtime)
@@ -65,6 +66,8 @@ enum WatchCommand {
     let sinceRowID = values.optionInt64("sinceRowID")
     let showAttachments = values.flag("attachments")
     let includeReactions = values.flag("reactions")
+    let resolveContacts = values.flag("contacts")
+    let inlineAvatars = values.flag("inlineAvatars")
     let participants = values.optionValues("participants")
       .flatMap { $0.split(separator: ",").map { String($0) } }
       .filter { !$0.isEmpty }
@@ -82,6 +85,15 @@ enum WatchCommand {
       includeReactions: includeReactions
     )
 
+    let resolver: ContactResolver?
+    if resolveContacts {
+      resolver = ContactResolver()
+      await resolver?.loadIfNeeded()
+    } else {
+      resolver = nil
+    }
+    let delivery: ContactResolver.AvatarDelivery = inlineAvatars ? .inline : .filePath
+
     let stream = streamProvider(watcher, chatID, sinceRowID, config)
     for try await message in stream {
       if !filter.allows(message) {
@@ -90,25 +102,43 @@ enum WatchCommand {
       if runtime.jsonOutput {
         let attachments = try store.attachments(for: message.rowID)
         let reactions = try store.reactions(for: message.rowID)
+        let senderContact: ResolvedContact?
+        if let resolver, !message.sender.isEmpty {
+          senderContact = await resolver.resolve(message.sender, delivery: delivery)
+        } else {
+          senderContact = nil
+        }
         let payload = MessagePayload(
           message: message,
           attachments: attachments,
-          reactions: reactions
+          reactions: reactions,
+          senderContact: senderContact
         )
         try StdoutWriter.writeJSONLine(payload)
         continue
       }
       let direction = message.isFromMe ? "sent" : "recv"
       let timestamp = CLIISO8601.format(message.date)
+      let senderLabel: String
+      if let resolver, !message.sender.isEmpty {
+        let contact = await resolver.resolve(message.sender, delivery: .metadataOnly)
+        if let name = contact.name {
+          senderLabel = "\(name) <\(message.sender)>"
+        } else {
+          senderLabel = message.sender
+        }
+      } else {
+        senderLabel = message.sender
+      }
       if message.isReaction, let reactionType = message.reactionType {
         let action = (message.isReactionAdd ?? true) ? "added" : "removed"
         let targetGUID = message.reactedToGUID ?? "unknown"
         StdoutWriter.writeLine(
-          "\(timestamp) [\(direction)] \(message.sender) \(action) \(reactionType.emoji) reaction to \(targetGUID)"
+          "\(timestamp) [\(direction)] \(senderLabel) \(action) \(reactionType.emoji) reaction to \(targetGUID)"
         )
         continue
       }
-      StdoutWriter.writeLine("\(timestamp) [\(direction)] \(message.sender): \(message.text)")
+      StdoutWriter.writeLine("\(timestamp) [\(direction)] \(senderLabel): \(message.text)")
       if message.attachmentsCount > 0 {
         if showAttachments {
           let metas = try store.attachments(for: message.rowID)

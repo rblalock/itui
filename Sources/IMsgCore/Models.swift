@@ -358,6 +358,9 @@ public struct Message: Sendable, Equatable {
 }
 
 public struct AttachmentMeta: Sendable, Equatable {
+  /// Stable `attachment.ROWID` from the Messages database. Used to key the HTTP
+  /// streaming endpoint (`/api/attachments/:id`) without exposing raw filesystem paths.
+  public let rowID: Int64
   public let filename: String
   public let transferName: String
   public let uti: String
@@ -368,6 +371,7 @@ public struct AttachmentMeta: Sendable, Equatable {
   public let missing: Bool
 
   public init(
+    rowID: Int64,
     filename: String,
     transferName: String,
     uti: String,
@@ -377,6 +381,7 @@ public struct AttachmentMeta: Sendable, Equatable {
     originalPath: String,
     missing: Bool
   ) {
+    self.rowID = rowID
     self.filename = filename
     self.transferName = transferName
     self.uti = uti

@@ -15,7 +15,9 @@ struct CommandRouter {
       WatchCommand.spec,
       SendCommand.spec,
       ReactCommand.spec,
+      ContactsCommand.spec,
       RpcCommand.spec,
+      ServeCommand.spec,
     ]
     let descriptor = CommandDescriptor(
       name: rootName,
@@ -56,7 +58,7 @@ struct CommandRouter {
         try await spec.run(invocation.parsedValues, runtime)
         return 0
       } catch {
-        StdoutWriter.writeLine(String(describing: error))
+        StdoutWriter.writeLine(describeError(error))
         return 1
       }
     } catch let error as CommanderProgramError {
@@ -66,7 +68,7 @@ struct CommandRouter {
       }
       return 1
     } catch {
-      StdoutWriter.writeLine(String(describing: error))
+      StdoutWriter.writeLine(describeError(error))
       return 1
     }
   }
@@ -99,6 +101,13 @@ struct CommandRouter {
       path.append(token)
     }
     return path
+  }
+
+  private func describeError(_ error: Error) -> String {
+    if let desc = (error as? LocalizedError)?.errorDescription {
+      return desc
+    }
+    return String(describing: error)
   }
 
   private static func resolveVersion() -> String {

@@ -235,7 +235,7 @@ public final class MessageStore: @unchecked Sendable {
 extension MessageStore {
   public func attachments(for messageID: Int64) throws -> [AttachmentMeta] {
     let sql = """
-      SELECT a.filename, a.transfer_name, a.uti, a.mime_type, a.total_bytes, a.is_sticker
+      SELECT a.ROWID, a.filename, a.transfer_name, a.uti, a.mime_type, a.total_bytes, a.is_sticker
       FROM message_attachment_join maj
       JOIN attachment a ON a.ROWID = maj.attachment_id
       WHERE maj.message_id = ?
@@ -243,15 +243,17 @@ extension MessageStore {
     return try withConnection { db in
       var metas: [AttachmentMeta] = []
       for row in try db.prepare(sql, messageID) {
-        let filename = stringValue(row[0])
-        let transferName = stringValue(row[1])
-        let uti = stringValue(row[2])
-        let mimeType = stringValue(row[3])
-        let totalBytes = int64Value(row[4]) ?? 0
-        let isSticker = boolValue(row[5])
+        let rowID = int64Value(row[0]) ?? 0
+        let filename = stringValue(row[1])
+        let transferName = stringValue(row[2])
+        let uti = stringValue(row[3])
+        let mimeType = stringValue(row[4])
+        let totalBytes = int64Value(row[5]) ?? 0
+        let isSticker = boolValue(row[6])
         let resolved = AttachmentResolver.resolve(filename)
         metas.append(
           AttachmentMeta(
+            rowID: rowID,
             filename: filename,
             transferName: transferName,
             uti: uti,
@@ -263,6 +265,41 @@ extension MessageStore {
           ))
       }
       return metas
+    }
+  }
+
+  /// Looks up a single attachment by its stable ROWID. Used by the HTTP attachment
+  /// streaming endpoint so clients never pass filesystem paths.
+  public func attachment(id rowID: Int64) throws -> AttachmentMeta? {
+    let sql = """
+      SELECT a.ROWID, a.filename, a.transfer_name, a.uti, a.mime_type, a.total_bytes, a.is_sticker
+      FROM attachment a
+      WHERE a.ROWID = ?
+      LIMIT 1
+      """
+    return try withConnection { db in
+      for row in try db.prepare(sql, rowID) {
+        let id = int64Value(row[0]) ?? 0
+        let filename = stringValue(row[1])
+        let transferName = stringValue(row[2])
+        let uti = stringValue(row[3])
+        let mimeType = stringValue(row[4])
+        let totalBytes = int64Value(row[5]) ?? 0
+        let isSticker = boolValue(row[6])
+        let resolved = AttachmentResolver.resolve(filename)
+        return AttachmentMeta(
+          rowID: id,
+          filename: filename,
+          transferName: transferName,
+          uti: uti,
+          mimeType: mimeType,
+          totalBytes: totalBytes,
+          isSticker: isSticker,
+          originalPath: resolved.resolved,
+          missing: resolved.missing
+        )
+      }
+      return nil
     }
   }
 
@@ -426,7 +463,7 @@ extension MessageStore {
     return nil
   }
 
-  private struct ReactionKey: Hashable {
+  struct ReactionKey: Hashable {
     let sender: String
     let isFromMe: Bool
     let reactionType: ReactionType
@@ -442,6 +479,149 @@ extension MessageStore {
         index[key] = offset
       }
       return index
+    }
+  }
+
+  // MARK: - Batch queries
+
+  public func batchAttachments(for messageIDs: [Int64]) throws -> [Int64: [AttachmentMeta]] {
+    guard !messageIDs.isEmpty else { return [:] }
+    let placeholders = Array(repeating: "?", count: messageIDs.count).joined(separator: ",")
+    let sql = """
+      SELECT maj.message_id, a.ROWID, a.filename, a.transfer_name, a.uti, a.mime_type, a.total_bytes, a.is_sticker
+      FROM message_attachment_join maj
+      JOIN attachment a ON a.ROWID = maj.attachment_id
+      WHERE maj.message_id IN (\(placeholders))
+      """
+    let bindings: [Binding?] = messageIDs.map { $0 as Binding? }
+    return try withConnection { db in
+      var result: [Int64: [AttachmentMeta]] = [:]
+      for row in try db.prepare(sql, bindings) {
+        let messageID = int64Value(row[0]) ?? 0
+        let attachmentID = int64Value(row[1]) ?? 0
+        let filename = stringValue(row[2])
+        let transferName = stringValue(row[3])
+        let uti = stringValue(row[4])
+        let mimeType = stringValue(row[5])
+        let totalBytes = int64Value(row[6]) ?? 0
+        let isSticker = boolValue(row[7])
+        let resolved = AttachmentResolver.resolve(filename)
+        let meta = AttachmentMeta(
+          rowID: attachmentID,
+          filename: filename,
+          transferName: transferName,
+          uti: uti,
+          mimeType: mimeType,
+          totalBytes: totalBytes,
+          isSticker: isSticker,
+          originalPath: resolved.resolved,
+          missing: resolved.missing
+        )
+        result[messageID, default: []].append(meta)
+      }
+      return result
+    }
+  }
+
+  public func batchReactions(for messageKeys: [(rowID: Int64, guid: String)]) throws
+    -> [Int64: [Reaction]]
+  {
+    guard hasReactionColumns else { return [:] }
+    let validKeys = messageKeys.filter { !$0.guid.isEmpty }
+    guard !validKeys.isEmpty else { return [:] }
+
+    var guidToRowID: [String: Int64] = [:]
+    for key in validKeys {
+      guidToRowID[key.guid] = key.rowID
+    }
+
+    let guids = validKeys.map(\.guid)
+    let placeholders = Array(repeating: "?", count: guids.count).joined(separator: ",")
+    let bodyColumn = hasAttributedBody ? "r.attributedBody" : "NULL"
+    let sql = """
+      SELECT m.guid AS orig_guid,
+             r.ROWID, r.associated_message_type, h.id, r.is_from_me, r.date,
+             IFNULL(r.text, '') AS text, \(bodyColumn) AS body
+      FROM message m
+      JOIN message r ON r.associated_message_guid = m.guid
+        OR r.associated_message_guid LIKE '%/' || m.guid
+      LEFT JOIN handle h ON r.handle_id = h.ROWID
+      WHERE m.guid IN (\(placeholders))
+        AND m.guid IS NOT NULL AND m.guid != ''
+        AND r.associated_message_type >= 2000 AND r.associated_message_type <= 3006
+      ORDER BY r.date ASC
+      """
+    let bindings: [Binding?] = guids.map { $0 as Binding? }
+
+    return try withConnection { db in
+      // Per-message reaction state
+      var reactionsMap: [Int64: [Reaction]] = [:]
+      var reactionIndexMap: [Int64: [ReactionKey: Int]] = [:]
+
+      for row in try db.prepare(sql, bindings) {
+        let origGUID = stringValue(row[0])
+        guard let messageRowID = guidToRowID[origGUID] else { continue }
+
+        let rowID = int64Value(row[1]) ?? 0
+        let typeValue = intValue(row[2]) ?? 0
+        let sender = stringValue(row[3])
+        let isFromMe = boolValue(row[4])
+        let date = appleDate(from: int64Value(row[5]))
+        let text = stringValue(row[6])
+        let body = dataValue(row[7])
+        let resolvedText = text.isEmpty ? TypedStreamParser.parseAttributedBody(body) : text
+
+        var reactions = reactionsMap[messageRowID] ?? []
+        var reactionIndex = reactionIndexMap[messageRowID] ?? [:]
+
+        if ReactionType.isReactionRemove(typeValue) {
+          let customEmoji = typeValue == 3006 ? extractCustomEmoji(from: resolvedText) : nil
+          let reactionType = ReactionType.fromRemoval(typeValue, customEmoji: customEmoji)
+          if let reactionType {
+            let key = ReactionKey(sender: sender, isFromMe: isFromMe, reactionType: reactionType)
+            if let index = reactionIndex.removeValue(forKey: key) {
+              reactions.remove(at: index)
+              reactionIndex = ReactionKey.reindex(reactions: reactions)
+            }
+          } else if typeValue == 3006 {
+            if let index = reactions.firstIndex(where: {
+              $0.sender == sender && $0.isFromMe == isFromMe && $0.reactionType.isCustom
+            }) {
+              reactions.remove(at: index)
+              reactionIndex = ReactionKey.reindex(reactions: reactions)
+            }
+          }
+          reactionsMap[messageRowID] = reactions
+          reactionIndexMap[messageRowID] = reactionIndex
+          continue
+        }
+
+        let customEmoji: String? = typeValue == 2006 ? extractCustomEmoji(from: resolvedText) : nil
+        guard let reactionType = ReactionType(rawValue: typeValue, customEmoji: customEmoji) else {
+          continue
+        }
+
+        let key = ReactionKey(sender: sender, isFromMe: isFromMe, reactionType: reactionType)
+        let reaction = Reaction(
+          rowID: rowID,
+          reactionType: reactionType,
+          sender: sender,
+          isFromMe: isFromMe,
+          date: date,
+          associatedMessageID: messageRowID
+        )
+
+        if let index = reactionIndex[key] {
+          reactions[index] = reaction
+        } else {
+          reactionIndex[key] = reactions.count
+          reactions.append(reaction)
+        }
+
+        reactionsMap[messageRowID] = reactions
+        reactionIndexMap[messageRowID] = reactionIndex
+      }
+      return reactionsMap
     }
   }
 }

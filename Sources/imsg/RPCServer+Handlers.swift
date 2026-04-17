@@ -4,6 +4,10 @@ import IMsgCore
 extension RPCServer {
   func handleChatsList(id: Any?, params: [String: Any]) async throws {
     let limit = intParam(params["limit"]) ?? 20
+    let includeContacts = boolParam(params["include_contacts"]) ?? true
+    let inlineAvatars = boolParam(params["inline_avatar"]) ?? false
+    let delivery: ContactResolver.AvatarDelivery = inlineAvatars ? .inline : .filePath
+
     let chats = try store.listChats(limit: max(limit, 1))
     var payloads: [[String: Any]] = []
     payloads.reserveCapacity(chats.count)
@@ -15,6 +19,15 @@ extension RPCServer {
       let guid = info?.guid ?? ""
       let name = (info?.name.isEmpty == false ? info?.name : nil) ?? chat.name
       let service = info?.service ?? chat.service
+
+      let resolved: [ResolvedContact]?
+      if includeContacts {
+        let map = await contactResolver.resolveMany(participants, delivery: delivery)
+        resolved = participants.map { map[$0] ?? ResolvedContact.unresolved(handle: $0) }
+      } else {
+        resolved = nil
+      }
+
       payloads.append(
         chatPayload(
           id: chat.id,
@@ -23,7 +36,8 @@ extension RPCServer {
           name: name,
           service: service,
           lastMessageAt: chat.lastMessageAt,
-          participants: participants
+          participants: participants,
+          participantsResolved: resolved
         ))
     }
 
@@ -39,6 +53,8 @@ extension RPCServer {
     let startISO = stringParam(params["start"])
     let endISO = stringParam(params["end"])
     let includeAttachments = boolParam(params["attachments"]) ?? false
+    let includeContacts = boolParam(params["include_contacts"]) ?? true
+    let inlineAvatars = boolParam(params["inline_avatar"]) ?? false
     let filter = try MessageFilter.fromISO(
       participants: participants,
       startISO: startISO,
@@ -52,6 +68,8 @@ extension RPCServer {
       let payload = try await buildMessagePayload(
         store: store,
         cache: cache,
+        contactResolver: includeContacts ? contactResolver : nil,
+        inlineAvatars: inlineAvatars,
         message: message,
         includeAttachments: includeAttachments
       )
@@ -69,6 +87,8 @@ extension RPCServer {
     let endISO = stringParam(params["end"])
     let includeAttachments = boolParam(params["attachments"]) ?? false
     let includeReactions = boolParam(params["include_reactions"]) ?? false
+    let includeContacts = boolParam(params["include_contacts"]) ?? true
+    let inlineAvatars = boolParam(params["inline_avatar"]) ?? false
     let filter = try MessageFilter.fromISO(
       participants: participants,
       startISO: startISO,
@@ -79,6 +99,8 @@ extension RPCServer {
     let localStore = store
     let localWatcher = watcher
     let localCache = cache
+    let localContactResolver: ContactResolver? = includeContacts ? contactResolver : nil
+    let localInlineAvatars = inlineAvatars
     let localWriter = output
     let localFilter = filter
     let localChatID = chatID
@@ -97,6 +119,8 @@ extension RPCServer {
           let payload = try await buildMessagePayload(
             store: localStore,
             cache: localCache,
+            contactResolver: localContactResolver,
+            inlineAvatars: localInlineAvatars,
             message: message,
             includeAttachments: localIncludeAttachments
           )
@@ -178,11 +202,37 @@ extension RPCServer {
     )
     respond(id: id, result: ["ok": true])
   }
+
+  func handleContactsList(id: Any?, params: [String: Any]) async throws {
+    let inlineAvatars = boolParam(params["inline_avatar"]) ?? false
+    let delivery: ContactResolver.AvatarDelivery = inlineAvatars ? .inline : .filePath
+    let contacts = await contactResolver.allContacts(delivery: delivery)
+    let status = await contactResolver.authorizationStatus()
+    respond(
+      id: id,
+      result: [
+        "authorization": status.rawValue,
+        "contacts": contacts.map { resolvedContactDictionary($0) },
+      ]
+    )
+  }
+
+  func handleContactsResolve(id: Any?, params: [String: Any]) async throws {
+    guard let handle = stringParam(params["handle"]), !handle.isEmpty else {
+      throw RPCError.invalidParams("handle is required")
+    }
+    let inlineAvatars = boolParam(params["inline_avatar"]) ?? true
+    let delivery: ContactResolver.AvatarDelivery = inlineAvatars ? .inline : .filePath
+    let contact = await contactResolver.resolve(handle, delivery: delivery)
+    respond(id: id, result: ["contact": resolvedContactDictionary(contact)])
+  }
 }
 
 private func buildMessagePayload(
   store: MessageStore,
   cache: ChatCache,
+  contactResolver: ContactResolver?,
+  inlineAvatars: Bool,
   message: Message,
   includeAttachments: Bool
 ) async throws -> [String: Any] {
@@ -190,11 +240,19 @@ private func buildMessagePayload(
   let participants = try await cache.participants(chatID: message.chatID)
   let attachments = includeAttachments ? try store.attachments(for: message.rowID) : []
   let reactions = includeAttachments ? try store.reactions(for: message.rowID) : []
+  let senderContact: ResolvedContact?
+  if let contactResolver, !message.sender.isEmpty {
+    let delivery: ContactResolver.AvatarDelivery = inlineAvatars ? .inline : .filePath
+    senderContact = await contactResolver.resolve(message.sender, delivery: delivery)
+  } else {
+    senderContact = nil
+  }
   return try messagePayload(
     message: message,
     chatInfo: chatInfo,
     participants: participants,
     attachments: attachments,
-    reactions: reactions
+    reactions: reactions,
+    senderContact: senderContact
   )
 }
