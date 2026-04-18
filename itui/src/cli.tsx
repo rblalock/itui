@@ -41,7 +41,7 @@ async function main() {
     process.stderr.write(
       `Created default config at ${configPath()}\n` +
         `  server: ${effective.server}\n` +
-        `Edit it or run 'itui config set server=https://your-host:8080' to change.\n\n`,
+        `Edit it or run 'itui config set server=https://your-host:13197' to change.\n\n`,
     );
   }
 
@@ -66,7 +66,7 @@ function printHelp(): void {
       "",
       "Config keys (set via `itui config set key=value`):",
       "",
-      "  server              string   http://127.0.0.1:8080",
+      "  server              string   http://127.0.0.1:13197",
       "                      Base URL of the imsg serve HTTP API.",
       "",
       "  token               string   null",

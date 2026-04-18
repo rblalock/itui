@@ -32,7 +32,7 @@ On first launch, itui creates `~/.config/itui/config.json` with defaults:
 
 ```json
 {
-  "server": "http://127.0.0.1:8080",
+  "server": "http://127.0.0.1:13197",
   "token": null,
   "defaultChatId": null,
   "reconnectDelayMs": 2000
@@ -42,13 +42,13 @@ On first launch, itui creates `~/.config/itui/config.json` with defaults:
 Point it at a different server:
 
 ```sh
-itui config set server=http://mac-mini.local:8080
+itui config set server=http://mac-mini.local:13197
 ```
 
 Or for a single run:
 
 ```sh
-itui --server=http://mac-mini.local:8080
+itui --server=http://mac-mini.local:13197
 ```
 
 ## Remote usage
@@ -57,8 +57,8 @@ The iMessage server (`imsg serve`) runs on your Mac. To reach it from another ma
 either expose it on a trusted network or tunnel in over SSH:
 
 ```sh
-# From your laptop, tunnel :8080 on the Mac to localhost:8080
-ssh -N -L 8080:127.0.0.1:8080 you@mac-mini.local
+# From your laptop, tunnel :13197 on the Mac to localhost:13197
+ssh -N -L 13197:127.0.0.1:13197 you@mac-mini.local
 
 # In another terminal on the laptop
 itui

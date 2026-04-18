@@ -14,7 +14,7 @@ iMessage in your terminal. Run the server on your Mac, connect from anywhere.
 │                             │├────────────────────────────────────────────────┤
 │                             ││ › Message · Enter to send                      │
 └─────────────────────────────┘└────────────────────────────────────────────────┘
- ↑↓ nav  ↵ open  i compose  ^N/^P prev/next  ^R reload  q quit  ● live · :8080
+ ↑↓ nav  ↵ open  i compose  ^N/^P prev/next  ^R reload  q quit  ● live · :13197
 ```
 
 ## Install
@@ -38,6 +38,12 @@ The installer:
 - Installs the `itui` TUI client (Bun + OpenTUI)
 - Puts both commands in `~/.local/bin`
 - Creates `~/.config/itui/config.json` with defaults
+- On macOS, offers to install a LaunchAgent so `imsg serve` runs on login
+
+The server defaults to port `13197` (chosen to avoid collisions with the usual
+dev-server ports). Override with `--port` on the CLI or `ITUI_PORT=...` during
+install. For non-interactive installs (e.g. `curl | bash`), set
+`ITUI_INSTALL_DAEMON=1` to install the LaunchAgent without prompting.
 
 ### Requirements
 
@@ -55,7 +61,7 @@ The installer:
 # 1. Start the server on your Mac
 imsg serve
 
-# 2. Open the TUI (same machine, or any machine that can reach :8080)
+# 2. Open the TUI (same machine, or any machine that can reach :13197)
 itui
 ```
 
@@ -65,18 +71,18 @@ The server runs on your Mac. Connect from anywhere:
 
 ```bash
 # SSH tunnel from your laptop
-ssh -N -L 8080:127.0.0.1:8080 you@your-mac.local
+ssh -N -L 13197:127.0.0.1:13197 you@your-mac.local
 
-# Then just run itui — it connects to localhost:8080 by default
+# Then just run itui — it connects to localhost:13197 by default
 itui
 ```
 
 Or point directly at a host on your network:
 
 ```bash
-itui --server=http://mac-mini.local:8080
+itui --server=http://mac-mini.local:13197
 # or persist it:
-itui config set server=http://mac-mini.local:8080
+itui config set server=http://mac-mini.local:13197
 ```
 
 ## Architecture
@@ -85,7 +91,7 @@ itui config set server=http://mac-mini.local:8080
 ┌─────────────────────────────────────────────────────────┐
 │                      Your Mac                           │
 │                                                         │
-│  Messages.app ← → chat.db ← → imsg serve (:8080)       │
+│  Messages.app ← → chat.db ← → imsg serve (:13197)      │
 │                                    │                    │
 │                    ┌───────────────┼───────────────┐    │
 │                    │ HTTP API      │ SSE stream    │    │
@@ -145,7 +151,7 @@ Config lives at `~/.config/itui/config.json`:
 
 ```json
 {
-  "server": "http://127.0.0.1:8080",
+  "server": "http://127.0.0.1:13197",
   "token": null,
   "defaultChatId": null,
   "reconnectDelayMs": 2000
@@ -184,7 +190,7 @@ imsg history --chat-id <id> [--limit 50] [--contacts] [--attachments] [--json]
 imsg watch [--chat-id <id>] [--contacts] [--attachments] [--json]
 imsg send --to <handle> --text "hi" [--service imessage|sms|auto]
 imsg contacts [--handle +15551234567] [--json]
-imsg serve [--host 127.0.0.1] [--port 8080]
+imsg serve [--host 127.0.0.1] [--port 13197]
 imsg rpc   # JSON-RPC over stdio
 ```
 

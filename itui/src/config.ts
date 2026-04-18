@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
 export interface Config {
-  /** Base URL of the `imsg serve` HTTP API, e.g. `http://127.0.0.1:8080`. */
+  /** Base URL of the `imsg serve` HTTP API, e.g. `http://127.0.0.1:13197`. */
   server: string;
   /** Optional bearer token. The imsg server does not require auth today, but leaving this
    * in the config now means once auth is added, upgrading is a one-line change. */
@@ -27,7 +27,7 @@ export interface Config {
 }
 
 export const DEFAULT_CONFIG: Config = {
-  server: "http://127.0.0.1:8080",
+  server: "http://127.0.0.1:13197",
   token: null,
   defaultChatId: null,
   reconnectDelayMs: 2000,

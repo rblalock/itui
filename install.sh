@@ -13,6 +13,13 @@ set -euo pipefail
 #
 # Or clone and run locally:
 #   git clone https://github.com/R44VC0RP/itui.git && cd itui && ./install.sh
+#
+# Environment variables:
+#   ITUI_INSTALL_DIR    Install location (default: ~/.itui)
+#   ITUI_INSTALL_DAEMON On macOS, force the LaunchAgent prompt:
+#                         1/yes/true  → install without prompting
+#                         0/no/false  → skip without prompting
+#   ITUI_PORT           Override the default server port (13197)
 # ──────────────────────────────────────────────────────────────────────────────
 
 BOLD="\033[1m"
@@ -27,8 +34,45 @@ warn()  { echo -e "${BOLD}${YELLOW}▸${RESET} $1"; }
 error() { echo -e "${BOLD}${RED}▸${RESET} $1"; }
 dim()   { echo -e "${DIM}  $1${RESET}"; }
 
+# Discover IPv4 addresses on non-loopback, non-virtual interfaces.
+# Prints one "ip iface" pair per line. Empty output if ifconfig isn't available
+# or no interfaces have a routable address. macOS-focused interface filtering:
+# we drop AWDL/AirDrop (awdl*, llw*), VPN tunnels (utun*), bridges, iPhone
+# hotspot helpers (anpi*, ap*), and virtualization NICs (vmenet*, vnic*) —
+# those either never carry useful addresses or would be misleading in output.
+list_lan_ipv4() {
+  command -v ifconfig &>/dev/null || return 0
+  ifconfig -a 2>/dev/null | awk '
+    /^[a-zA-Z0-9]+:.*flags=/ {
+      iface = $1
+      sub(":$", "", iface)
+      skip = (iface ~ /^(lo|utun|awdl|llw|anpi|ap[0-9]|bridge|gif|stf|vmenet|vnic)/)
+    }
+    /^[[:space:]]+inet [0-9]/ {
+      if (skip) next
+      ip = $2
+      # Skip loopback and IPv4 link-local (169.254/16, assigned when DHCP fails).
+      if (ip !~ /^127\./ && ip !~ /^169\.254\./) {
+        print ip, iface
+      }
+    }
+  '
+}
+
 REPO_URL="https://github.com/R44VC0RP/itui.git"
 INSTALL_DIR="${ITUI_INSTALL_DIR:-$HOME/.itui}"
+
+# Non-generic default port chosen to avoid collisions with common dev servers
+# (3000, 4000, 5000, 5173, 8000, 8080, 8888, 9000, etc.). Users can override
+# with ITUI_PORT or, later, `itui config set server=...`.
+DEFAULT_PORT="${ITUI_PORT:-13197}"
+
+DAEMON_LABEL="com.r44vc0rp.itui.imsg"
+DAEMON_PLIST="$HOME/Library/LaunchAgents/$DAEMON_LABEL.plist"
+DAEMON_LOG_DIR="$HOME/.itui/logs"
+
+# Tracks whether we actually installed the daemon; controls the final message.
+DAEMON_INSTALLED=0
 
 # ── Preflight ─────────────────────────────────────────────────────────────────
 
@@ -89,6 +133,8 @@ cd "$INSTALL_DIR"
 
 # ── Build the imsg server (macOS only) ────────────────────────────────────────
 
+IMSG_BIN=""
+
 if [[ "$(uname -s)" == "Darwin" ]]; then
   echo ""
   info "Building imsg server (universal release)…"
@@ -102,17 +148,14 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
     cp "$(swift build -c release --show-bin-path)/imsg" bin/imsg 2>/dev/null || true
   fi
 
-  IMSG_BIN="$INSTALL_DIR/bin/imsg"
-  if [[ -f "$IMSG_BIN" ]]; then
+  if [[ -f "$INSTALL_DIR/bin/imsg" ]]; then
+    IMSG_BIN="$INSTALL_DIR/bin/imsg"
+    info "Server built: $IMSG_BIN"
+  elif [[ -f "$INSTALL_DIR/.build/release/imsg" ]]; then
+    IMSG_BIN="$INSTALL_DIR/.build/release/imsg"
     info "Server built: $IMSG_BIN"
   else
-    # Fallback to debug build path
-    IMSG_BIN="$INSTALL_DIR/.build/release/imsg"
-    if [[ -f "$IMSG_BIN" ]]; then
-      info "Server built: $IMSG_BIN"
-    else
-      warn "Server binary not found — you can build manually with 'make build'"
-    fi
+    warn "Server binary not found — you can build manually with 'make build'"
   fi
 fi
 
@@ -141,14 +184,9 @@ chmod +x "$BIN_DIR/itui"
 info "  itui  → $BIN_DIR/itui"
 
 # imsg server (macOS only)
-if [[ "$(uname -s)" == "Darwin" ]]; then
-  if [[ -f "$INSTALL_DIR/bin/imsg" ]]; then
-    ln -sf "$INSTALL_DIR/bin/imsg" "$BIN_DIR/imsg"
-    info "  imsg  → $BIN_DIR/imsg"
-  elif [[ -f "$INSTALL_DIR/.build/release/imsg" ]]; then
-    ln -sf "$INSTALL_DIR/.build/release/imsg" "$BIN_DIR/imsg"
-    info "  imsg  → $BIN_DIR/imsg"
-  fi
+if [[ "$(uname -s)" == "Darwin" ]] && [[ -n "$IMSG_BIN" ]]; then
+  ln -sf "$IMSG_BIN" "$BIN_DIR/imsg"
+  info "  imsg  → $BIN_DIR/imsg"
 fi
 
 # ── PATH check ────────────────────────────────────────────────────────────────
@@ -167,9 +205,9 @@ fi
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/itui"
 if [[ ! -f "$CONFIG_DIR/config.json" ]]; then
   mkdir -p "$CONFIG_DIR"
-  cat > "$CONFIG_DIR/config.json" << 'CONFIG'
+  cat > "$CONFIG_DIR/config.json" << CONFIG
 {
-  "server": "http://127.0.0.1:8080",
+  "server": "http://127.0.0.1:${DEFAULT_PORT}",
   "token": null,
   "defaultChatId": null,
   "reconnectDelayMs": 2000,
@@ -181,6 +219,117 @@ CONFIG
   info "Created config at $CONFIG_DIR/config.json"
 else
   info "Config already exists at $CONFIG_DIR/config.json"
+  dim "(not overwriting — check that 'server' points to port $DEFAULT_PORT if you want the daemon default)"
+fi
+
+# ── macOS LaunchAgent (optional daemon) ──────────────────────────────────────
+
+# Writes and (re)loads a user-level LaunchAgent that runs `imsg serve` on login
+# and restarts it on crash. User-level (not a system LaunchDaemon) because the
+# server needs access to the user's Messages DB and Contacts, both of which are
+# only reachable from the user's session.
+install_daemon() {
+  local bin="$1"
+  local port="$2"
+
+  mkdir -p "$(dirname "$DAEMON_PLIST")"
+  mkdir -p "$DAEMON_LOG_DIR"
+
+  # If an older version of the plist is already loaded, unload it so we can
+  # update ProgramArguments (port, binary path, etc.) cleanly.
+  if launchctl print "gui/$UID/$DAEMON_LABEL" &>/dev/null; then
+    launchctl bootout "gui/$UID/$DAEMON_LABEL" 2>/dev/null || true
+  fi
+
+  cat > "$DAEMON_PLIST" << PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>${DAEMON_LABEL}</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>${bin}</string>
+        <string>serve</string>
+        <string>--host</string>
+        <string>127.0.0.1</string>
+        <string>--port</string>
+        <string>${port}</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+        <key>Crashed</key>
+        <true/>
+    </dict>
+    <key>ThrottleInterval</key>
+    <integer>5</integer>
+    <key>ProcessType</key>
+    <string>Interactive</string>
+    <key>StandardOutPath</key>
+    <string>${DAEMON_LOG_DIR}/imsg.log</string>
+    <key>StandardErrorPath</key>
+    <string>${DAEMON_LOG_DIR}/imsg.err.log</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>HOME</key>
+        <string>${HOME}</string>
+    </dict>
+</dict>
+</plist>
+PLIST
+
+  chmod 644 "$DAEMON_PLIST"
+
+  if launchctl bootstrap "gui/$UID" "$DAEMON_PLIST" 2>/dev/null; then
+    launchctl kickstart -k "gui/$UID/$DAEMON_LABEL" &>/dev/null || true
+    info "  Loaded LaunchAgent — running on 127.0.0.1:${port}"
+    DAEMON_INSTALLED=1
+  else
+    warn "Wrote plist but launchctl bootstrap failed."
+    dim "Load manually: launchctl bootstrap gui/\$UID $DAEMON_PLIST"
+  fi
+}
+
+prompt_daemon_install() {
+  # Env-var override wins over interactive prompt so `curl | bash` installs
+  # can set it up without TTY interaction.
+  case "${ITUI_INSTALL_DAEMON:-}" in
+    1|yes|true|YES|TRUE)  return 0 ;;
+    0|no|false|NO|FALSE)  return 1 ;;
+  esac
+
+  # No TTY on stdin (piped install). We deliberately don't read from /dev/tty
+  # here — installing a persistent background daemon should be opt-in via env
+  # var when running non-interactively.
+  if [[ ! -t 0 ]]; then
+    dim "Tip: set ITUI_INSTALL_DAEMON=1 to install the LaunchAgent non-interactively."
+    return 1
+  fi
+
+  local ans=""
+  read -rp "Install a LaunchAgent so the imsg server runs on login? [y/N] " ans || return 1
+  case "$ans" in
+    y|Y|yes|YES|Yes) return 0 ;;
+    *)               return 1 ;;
+  esac
+}
+
+if [[ "$(uname -s)" == "Darwin" ]] && [[ -n "$IMSG_BIN" ]] && [[ -x "$IMSG_BIN" ]]; then
+  echo ""
+  info "macOS LaunchAgent (optional background daemon)"
+  dim "A user-level LaunchAgent keeps 'imsg serve' running on 127.0.0.1:${DEFAULT_PORT}"
+  dim "across logins, and auto-restarts on crash. Logs land in $DAEMON_LOG_DIR."
+
+  if prompt_daemon_install; then
+    install_daemon "$IMSG_BIN" "$DEFAULT_PORT"
+  else
+    dim "Skipped. You can install it later by re-running this script with ITUI_INSTALL_DAEMON=1."
+  fi
 fi
 
 # ── macOS permissions reminder ────────────────────────────────────────────────
@@ -192,13 +341,69 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
   echo "  The imsg server reads your Messages database and sends messages"
   echo "  via AppleScript. You'll need to grant:"
   echo ""
-  echo "    1. Full Disk Access     → System Settings → Privacy → Full Disk Access"
-  echo "       (for your terminal app — iTerm2, Terminal.app, etc.)"
+  if [[ "$DAEMON_INSTALLED" -eq 1 ]]; then
+    # When run under launchd, TCC applies to the imsg binary itself, not the
+    # parent terminal. Grant has to target the binary path explicitly.
+    echo "    1. Full Disk Access     → System Settings → Privacy → Full Disk Access"
+    echo "       Add: $IMSG_BIN"
+    echo "       (and also your terminal app if you plan to run imsg commands directly)"
+  else
+    echo "    1. Full Disk Access     → System Settings → Privacy → Full Disk Access"
+    echo "       (for your terminal app — iTerm2, Terminal.app, etc.)"
+  fi
   echo ""
   echo "    2. Contacts Access      → granted on first run (a prompt will appear)"
   echo ""
   echo "    3. Automation (Messages) → granted on first send (a prompt will appear)"
   echo ""
+fi
+
+# ── Network addresses ────────────────────────────────────────────────────────
+
+# Show how this machine is reachable. The daemon (and default `imsg serve`) bind
+# to 127.0.0.1, so LAN URLs require either an SSH tunnel or rebinding to
+# 0.0.0.0. We show them regardless because:
+#  1. Users often want to tunnel from another machine and need to pick a host.
+#  2. If they run `imsg serve --host 0.0.0.0` manually, these URLs are live.
+#  3. Knowing the LAN address makes the SSH tunnel instructions concrete.
+if [[ "$(uname -s)" == "Darwin" ]]; then
+  echo ""
+  echo -e "${BOLD}  Network addresses:${RESET}"
+  echo ""
+  echo "    Local:     http://127.0.0.1:${DEFAULT_PORT}"
+
+  LAN_ENTRIES=$(list_lan_ipv4)
+  if [[ -n "$LAN_ENTRIES" ]]; then
+    first_lan=1
+    while IFS= read -r entry; do
+      [[ -z "$entry" ]] && continue
+      ip=$(echo "$entry" | awk '{print $1}')
+      iface=$(echo "$entry" | awk '{print $2}')
+      if [[ "$first_lan" -eq 1 ]]; then
+        printf "    LAN:       %-22s ${DIM}(%s)${RESET}\n" "http://${ip}:${DEFAULT_PORT}" "$iface"
+        first_lan=0
+      else
+        printf "               %-22s ${DIM}(%s)${RESET}\n" "http://${ip}:${DEFAULT_PORT}" "$iface"
+      fi
+    done <<< "$LAN_ENTRIES"
+
+    echo ""
+    if [[ "$DAEMON_INSTALLED" -eq 1 ]]; then
+      dim "The daemon binds to 127.0.0.1 only (no auth on the server yet)."
+      dim "To reach a LAN URL from another machine, either:"
+      dim "  • SSH tunnel (recommended):"
+      dim "      ssh -N -L ${DEFAULT_PORT}:127.0.0.1:${DEFAULT_PORT} you@this-mac"
+      dim "  • Or rebind the daemon to 0.0.0.0 (only on a trusted network):"
+      dim "      edit $DAEMON_PLIST (change --host 127.0.0.1 → 0.0.0.0) and reload:"
+      dim "      launchctl bootout gui/\$UID $DAEMON_PLIST && launchctl bootstrap gui/\$UID $DAEMON_PLIST"
+    else
+      dim "By default 'imsg serve' binds to 127.0.0.1 only. To expose on LAN:"
+      dim "  imsg serve --host 0.0.0.0 --port ${DEFAULT_PORT}"
+      dim "(No auth on the server yet — only do this on trusted networks.)"
+    fi
+  else
+    dim "No LAN interfaces detected."
+  fi
 fi
 
 # ── Done ──────────────────────────────────────────────────────────────────────
@@ -209,15 +414,21 @@ echo ""
 echo "  Quick start:"
 echo ""
 if [[ "$(uname -s)" == "Darwin" ]]; then
-  echo "    1. Start the server:   imsg serve"
-  echo "    2. Open the TUI:       itui"
+  if [[ "$DAEMON_INSTALLED" -eq 1 ]]; then
+    echo "    1. Server is running in the background (LaunchAgent)"
+    echo "    2. Open the TUI:       itui"
+    echo ""
+    echo "  Daemon controls:"
+    echo "    Logs:      tail -f $DAEMON_LOG_DIR/imsg.log"
+    echo "    Restart:   launchctl kickstart -k gui/\$UID/$DAEMON_LABEL"
+    echo "    Stop:      launchctl bootout gui/\$UID/$DAEMON_LABEL"
+    echo "    Uninstall: launchctl bootout gui/\$UID/$DAEMON_LABEL && rm $DAEMON_PLIST"
+  else
+    echo "    1. Start the server:   imsg serve"
+    echo "    2. Open the TUI:       itui"
+  fi
 else
-  echo "    1. Point at your Mac:  itui config set server=http://your-mac:8080"
+  echo "    1. Point at your Mac:  itui config set server=http://your-mac:${DEFAULT_PORT}"
   echo "    2. Open the TUI:       itui"
 fi
-echo ""
-echo "  Remote access (from another machine):"
-echo ""
-echo "    ssh -N -L 8080:127.0.0.1:8080 you@your-mac"
-echo "    itui"
 echo ""
