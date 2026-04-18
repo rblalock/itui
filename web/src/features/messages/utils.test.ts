@@ -118,6 +118,8 @@ describe("message utilities", () => {
   it("maps RCS threads separately from SMS and iMessage", () => {
     expect(threadService("RCS")).toBe("rcs")
     expect(threadServiceLabel("rcs")).toBe("RCS")
+    expect(threadService("MMS")).toBe("sms")
+    expect(threadServiceLabel("sms")).toBe("SMS/MMS")
   })
 
   it("prefers preview URLs for browser-rendered attachment media", () => {

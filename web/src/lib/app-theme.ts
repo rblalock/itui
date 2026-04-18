@@ -433,7 +433,11 @@ export function parseColorsToml(contents: string): ThemePalette {
 
 export function deriveAppTheme(palette: ThemePalette): DerivedAppTheme {
   const mode = isDarkHex(palette.background) ? "dark" : "light"
-  const primaryForeground = pickReadableText(palette.accent)
+  const imessageBubble = palette.accent
+  const rcsBubble = palette.color6 ?? palette.color4 ?? palette.accent
+  const smsBubble = palette.color2 ?? "#34c759"
+  const imessageForeground = pickBubbleText(imessageBubble, { preferLight: true })
+  const primaryForeground = imessageForeground
   const selectionBase = palette.selectionBackground ?? palette.accent
 
   return {
@@ -453,9 +457,12 @@ export function deriveAppTheme(palette: ThemePalette): DerivedAppTheme {
       "--destructive": palette.color1 ?? "#ef4444",
       "--foreground": palette.foreground,
       "--input": mix(palette.background, palette.foreground, mode === "dark" ? 18 : 14),
-      "--message-imessage": palette.accent,
-      "--message-rcs": palette.color6 ?? palette.color4 ?? palette.accent,
-      "--message-sms": palette.color2 ?? "#34c759",
+      "--message-imessage": imessageBubble,
+      "--message-imessage-foreground": imessageForeground,
+      "--message-rcs": rcsBubble,
+      "--message-rcs-foreground": pickBubbleText(rcsBubble),
+      "--message-sms": smsBubble,
+      "--message-sms-foreground": pickBubbleText(smsBubble),
       "--muted": mix(palette.background, palette.foreground, mode === "dark" ? 6 : 8),
       "--muted-foreground": mix(palette.foreground, palette.background, mode === "dark" ? 26 : 38),
       "--popover": mix(palette.background, palette.foreground, mode === "dark" ? 10 : 5),
@@ -555,6 +562,19 @@ function contrastRatio(left: string, right: string) {
   const lighter = Math.max(luminanceLeft, luminanceRight)
   const darker = Math.min(luminanceLeft, luminanceRight)
   return (lighter + 0.05) / (darker + 0.05)
+}
+
+function pickBubbleText(
+  background: string,
+  options?: {
+    preferLight?: boolean
+  }
+) {
+  if (options?.preferLight && contrastRatio(background, "#ffffff") >= 3.35) {
+    return "#ffffff"
+  }
+
+  return pickReadableText(background)
 }
 
 function pickReadableText(background: string) {

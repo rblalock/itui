@@ -68,8 +68,11 @@
   --input: oklch(0.91 0.007 248);
   --ring: #0a84ff;
   --message-imessage: #0a84ff;
+  --message-imessage-foreground: #ffffff;
   --message-rcs: #3aa0c8;
+  --message-rcs-foreground: #ffffff;
   --message-sms: #34c759;
+  --message-sms-foreground: #ffffff;
   --selection-background: #cfe4ff;
   --selection-foreground: #11304d;
   --chart-1: oklch(0.869 0.005 56.366);
@@ -108,8 +111,11 @@
   --input: oklch(0.335 0.01 248 / 80%);
   --ring: #0a84ff;
   --message-imessage: #0a84ff;
+  --message-imessage-foreground: #ffffff;
   --message-rcs: #5cc8ff;
+  --message-rcs-foreground: #000000;
   --message-sms: #34c759;
+  --message-sms-foreground: #ffffff;
   --selection-background: #0a84ff;
   --selection-foreground: #ffffff;
   --chart-1: oklch(0.869 0.005 56.366);

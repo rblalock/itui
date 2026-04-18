@@ -57,6 +57,32 @@ color6 = "#449dab"
     expect(derived.cssVariables["--message-sms"]).toBe("#40a02b")
   })
 
+  it("derives readable bubble foregrounds for light transport colors", () => {
+    const derived = deriveAppTheme({
+      accent: "#e7f1ff",
+      background: "#0f1720",
+      foreground: "#f8fbff",
+      color2: "#bcf7c5",
+      color6: "#c8f2ff",
+    })
+
+    expect(derived.cssVariables["--message-imessage-foreground"]).toBe("#000000")
+    expect(derived.cssVariables["--message-sms-foreground"]).toBe("#000000")
+    expect(derived.cssVariables["--message-rcs-foreground"]).toBe("#000000")
+  })
+
+  it("keeps iMessage bubbles white on saturated blue accents", () => {
+    const derived = deriveAppTheme({
+      accent: "#2482e7",
+      background: "#111821",
+      foreground: "#f8fbff",
+      color2: "#bcf7c5",
+      color6: "#c8f2ff",
+    })
+
+    expect(derived.cssVariables["--message-imessage-foreground"]).toBe("#ffffff")
+  })
+
   it("creates friendly imported theme names from filenames", () => {
     expect(createImportedTheme("tokyo-night.toml", parseColorsToml(`
 accent = "#7aa2f7"

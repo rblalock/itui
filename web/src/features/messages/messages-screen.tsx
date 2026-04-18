@@ -21,6 +21,7 @@ import {
 import { ComposePickerDialog } from "@/features/messages/components/compose-picker-dialog"
 import { ConversationDetailsSheet } from "@/features/messages/components/conversation-details-sheet"
 import { ConversationList } from "@/features/messages/components/conversation-list"
+import { ConversationServiceBadge } from "@/features/messages/components/conversation-service-badge"
 import { SettingsSheet } from "@/features/messages/components/settings-sheet"
 import { ConversationThread } from "@/features/messages/components/conversation-thread"
 import { MessageComposer } from "@/features/messages/components/message-composer"
@@ -133,12 +134,21 @@ export function MessagesScreen() {
                               {activeConversation.title}
                             </h2>
 
-                            <p className="truncate pt-0.5 text-xs text-muted-foreground">
-                              {activeConversation.subtitle &&
-                              conversation.headerStatus !== "No conversation selected"
-                                ? `${activeConversation.subtitle} · ${conversation.headerStatus}`
-                                : conversation.headerStatus}
-                            </p>
+                            <div className="flex min-w-0 flex-wrap items-center gap-1.5 pt-0.5">
+                              {activeConversation.kind === "thread" ? (
+                                <ConversationServiceBadge
+                                  className="shrink-0"
+                                  service={activeConversation.service}
+                                />
+                              ) : null}
+
+                              <p className="min-w-0 truncate text-xs text-muted-foreground">
+                                {activeConversation.subtitle &&
+                                conversation.headerStatus !== "No conversation selected"
+                                  ? `${activeConversation.subtitle} · ${conversation.headerStatus}`
+                                  : conversation.headerStatus}
+                              </p>
+                            </div>
                           </div>
                         </button>
                       ) : (

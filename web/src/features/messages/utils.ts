@@ -117,7 +117,7 @@ export const formatDayDivider = (timestamp: string) => {
 export const threadService = (service: string): ThreadService =>
   service.toLowerCase().includes("rcs")
     ? "rcs"
-    : service.toLowerCase().includes("sms")
+    : service.toLowerCase().includes("sms") || service.toLowerCase().includes("mms")
       ? "sms"
       : "imessage"
 
@@ -222,12 +222,12 @@ export const messageCountLabel = (count: number) =>
 
 export const outgoingBubbleClass = (service: ThreadService) =>
   service === "sms"
-    ? "bg-[var(--message-sms)] text-white"
+    ? "bg-[var(--message-sms)] text-[color:var(--message-sms-foreground)]"
     : service === "rcs"
-      ? "bg-[var(--message-rcs)] text-white"
+      ? "bg-[var(--message-rcs)] text-[color:var(--message-rcs-foreground)]"
     : service === "auto"
       ? "bg-muted text-foreground"
-      : "bg-[var(--message-imessage)] text-white"
+      : "bg-[var(--message-imessage)] text-[color:var(--message-imessage-foreground)]"
 
 export const composerPlaceholder = (service: ThreadService) =>
   service === "sms" || service === "rcs"
@@ -238,7 +238,7 @@ export const composerPlaceholder = (service: ThreadService) =>
 
 export const threadServiceLabel = (service: ThreadService) =>
   service === "sms"
-    ? "SMS"
+    ? "SMS/MMS"
     : service === "rcs"
       ? "RCS"
       : service === "auto"

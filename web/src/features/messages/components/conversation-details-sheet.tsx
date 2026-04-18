@@ -1,6 +1,5 @@
 import { useMemo } from "react"
 
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
@@ -13,11 +12,12 @@ import {
 } from "@/components/ui/sheet"
 import { CopyIcon, MessageSquareTextIcon, UsersIcon } from "lucide-react"
 
+import { ConversationServiceBadge } from "@/features/messages/components/conversation-service-badge"
 import { ThreadAvatar } from "@/features/messages/components/thread-avatar"
 import { displayNameForContact } from "@/features/messages/thread-identity"
 import type { ActiveConversation } from "@/features/messages/types"
-import { threadServiceLabel } from "@/features/messages/utils"
 import { copyPlainText } from "@/lib/clipboard"
+import { Badge } from "@/components/ui/badge"
 
 const detailTime = new Intl.DateTimeFormat("en-US", {
   dateStyle: "medium",
@@ -104,11 +104,11 @@ export function ConversationDetailsSheet({
                   </SheetDescription>
 
                   <div className="mt-3 flex flex-wrap gap-2">
-                    <Badge variant="secondary">
-                      {activeConversation.kind === "thread"
-                        ? threadServiceLabel(activeConversation.service)
-                        : "Draft"}
-                    </Badge>
+                    {activeConversation.kind === "thread" ? (
+                      <ConversationServiceBadge service={activeConversation.service} />
+                    ) : (
+                      <Badge variant="secondary">Draft</Badge>
+                    )}
                     <Badge variant="outline">{headerStatus}</Badge>
                   </div>
                 </div>
