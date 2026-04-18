@@ -21,7 +21,7 @@ export class ImsgClient {
   constructor(private config: Config) {}
 
   private headers(): Record<string, string> {
-    const h: Record<string, string> = { Accept: "application/json" };
+    const h: Record<string, string> = { ...this.config.customHeaders, Accept: "application/json" };
     if (this.config.token) h.Authorization = `Bearer ${this.config.token}`;
     return h;
   }

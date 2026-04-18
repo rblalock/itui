@@ -50,7 +50,7 @@ export class ImsgEventStream {
     const base = this.config.server.replace(/\/+$/, "");
     const url = `${base}/api/events${params.toString() ? `?${params}` : ""}`;
 
-    const headers: Record<string, string> = { Accept: "text/event-stream" };
+    const headers: Record<string, string> = { ...this.config.customHeaders, Accept: "text/event-stream" };
     if (this.config.token) headers.Authorization = `Bearer ${this.config.token}`;
 
     const res = await fetch(url, { headers, signal: this.aborter.signal });
