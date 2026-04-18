@@ -38,7 +38,7 @@ Run the Swift backend separately:
 
 ```bash
 swift build -c debug --product imsg
-./.build/debug/imsg serve --host 127.0.0.1 --port 8080
+./.build/debug/imsg serve --host 127.0.0.1 --port 13197
 ```
 
 That path serves the bundled frontend copied into
@@ -68,15 +68,15 @@ cp .env.example .env.local
 Then set `VITE_IMSG_PROXY_TARGET` in `.env.local`, for example:
 
 ```bash
-VITE_IMSG_PROXY_TARGET=http://127.0.0.1:8080
+VITE_IMSG_PROXY_TARGET=http://127.0.0.1:13197
 ```
 
 If the backend is running on another Mac, either point this to the tailnet/LAN
 host directly or tunnel it first:
 
 ```bash
-ssh -L 8080:127.0.0.1:8080 user@your-hostname
-VITE_IMSG_PROXY_TARGET=http://127.0.0.1:8080
+ssh -L 13197:127.0.0.1:13197 user@your-hostname
+VITE_IMSG_PROXY_TARGET=http://127.0.0.1:13197
 ```
 
 ## Bundle Into `imsg`

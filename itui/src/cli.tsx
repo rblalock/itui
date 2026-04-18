@@ -41,7 +41,7 @@ async function main() {
     process.stderr.write(
       `Created default config at ${configPath()}\n` +
         `  server: ${effective.server}\n` +
-        `Edit it or run 'itui config set server=https://your-host:8080' to change.\n\n`,
+        `Edit it or run 'itui config set server=https://your-host:13197' to change.\n\n`,
     );
   }
 
@@ -66,7 +66,7 @@ function printHelp(): void {
       "",
       "Config keys (set via `itui config set key=value`):",
       "",
-      "  server              string   http://127.0.0.1:8080",
+      "  server              string   http://127.0.0.1:13197",
       "                      Base URL of the imsg serve HTTP API.",
       "",
       "  token               string   null",
@@ -88,6 +88,14 @@ function printHelp(): void {
       "",
       "  notificationSound   bool     true",
       "                      Play a sound with notifications.",
+      "",
+      "  header.<Name>       string   (none)",
+      "                      Set a custom HTTP header sent with every",
+      "                      request. Useful for proxy auth, e.g.:",
+      "                      itui config set \\",
+      "                        header.CF-Access-Client-Id=xxx \\",
+      "                        header.CF-Access-Client-Secret=yyy",
+      "                      Remove with header.Name=null",
       "",
       "Config file: ~/.config/itui/config.json (respects $XDG_CONFIG_HOME)",
       "",
@@ -183,6 +191,29 @@ function applyConfigKey(patch: Partial<Config>, key: string, value: string): voi
       patch.notificationSound = value === "true" || value === "1";
       return;
     default:
+      if (key.startsWith("header.")) {
+        const name = key.slice("header.".length);
+        if (!name) {
+          process.stderr.write("header name cannot be empty\n");
+          process.exit(1);
+        }
+        if (!patch.customHeaders) {
+          const { config } = loadOrCreateConfig();
+          patch.customHeaders = { ...config.customHeaders };
+        }
+        if (value === "" || value === "null") {
+          delete patch.customHeaders[name];
+        } else {
+          try {
+            new Headers([[name, value]]);
+          } catch {
+            process.stderr.write(`invalid header ${name}\n`);
+            process.exit(1);
+          }
+          patch.customHeaders[name] = value;
+        }
+        return;
+      }
       process.stderr.write(`unknown config key: ${key}\n`);
       process.exit(1);
   }

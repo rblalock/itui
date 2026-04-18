@@ -14,7 +14,7 @@ iMessage in your terminal and browser. Run the server on your Mac, connect from 
 │                             │├────────────────────────────────────────────────┤
 │                             ││ › Message · Enter to send                      │
 └─────────────────────────────┘└────────────────────────────────────────────────┘
- ↑↓ nav  ↵ open  i compose  ^N/^P prev/next  ^R reload  q quit  ● live · :8080
+ ↑↓ nav  ↵ open  i compose  ^N/^P prev/next  ^R reload  q quit  ● live · :13197
 ```
 
 ## Install
@@ -38,7 +38,13 @@ The installer:
 - Refreshes the bundled browser assets when Node.js/npm are available
 - Installs the optional `itui` TUI client when Bun is available
 - Puts `imsg` and, if installed, `itui` in `~/.local/bin`
-- Creates `~/.config/itui/config.json` with defaults when the TUI is installed
+- Creates `~/.config/itui/config.json` when the TUI is installed
+- On macOS, offers to install a LaunchAgent so `imsg serve` runs on login
+
+The server defaults to port `13197` (chosen to avoid collisions with the usual
+dev-server ports). Override with `--port` on the CLI or `ITUI_PORT=...` during
+install. For non-interactive installs (e.g. `curl | bash`), set
+`ITUI_INSTALL_DAEMON=1` to install the LaunchAgent without prompting.
 
 ### Requirements
 
@@ -58,10 +64,10 @@ The installer:
 Start the server on your Mac and open it in a browser:
 
 ```bash
-imsg serve --host 127.0.0.1 --port 8080
+imsg serve --host 127.0.0.1 --port 13197
 
 # then open:
-http://127.0.0.1:8080
+http://127.0.0.1:13197
 ```
 
 If you plan to launch `imsg serve` over SSH or another background context, run it once locally first so macOS can show the Contacts and Automation permission prompts.
@@ -71,7 +77,7 @@ If you plan to launch `imsg serve` over SSH or another background context, run i
 Keep `imsg serve` bound to localhost and let Tailscale publish it inside your tailnet:
 
 ```bash
-tailscale serve --bg 8080
+tailscale serve --bg 13197
 tailscale serve status
 ```
 
@@ -93,12 +99,12 @@ server first:
 ```bash
 make web-build
 swift build -c debug --product imsg
-./.build/debug/imsg serve --host 127.0.0.1 --port 8080
+./.build/debug/imsg serve --host 127.0.0.1 --port 13197
 ```
 
 `imsg serve` serves the last copied browser bundle from
 `Sources/imsg/Resources/web/`. If you changed anything under `web/`, run
-`make web-build` again before testing the browser through `:8080`.
+`make web-build` again before testing the browser through `:13197`.
 
 ## Remote access without Tailscale
 
@@ -106,10 +112,10 @@ The server runs on your Mac. Connect from anywhere:
 
 ```bash
 # SSH tunnel from your laptop
-ssh -N -L 8080:127.0.0.1:8080 you@your-mac.local
+ssh -N -L 13197:127.0.0.1:13197 you@your-mac.local
 
-# Then open the browser app at http://127.0.0.1:8080
-# or run itui — it connects to localhost:8080 by default
+# Then open the browser app at http://127.0.0.1:13197
+# or run itui — it connects to localhost:13197 by default
 itui
 ```
 
@@ -117,12 +123,12 @@ Or point directly at a host on your network:
 
 ```bash
 # browser
-open http://imsg-host.local:8080
+open http://imsg-host.local:13197
 
 # TUI
-itui --server=http://imsg-host.local:8080
+itui --server=http://imsg-host.local:13197
 # or persist it:
-itui config set server=http://imsg-host.local:8080
+itui config set server=http://imsg-host.local:13197
 ```
 
 ## Architecture
@@ -131,7 +137,7 @@ itui config set server=http://imsg-host.local:8080
 ┌─────────────────────────────────────────────────────────┐
 │                      Your Mac                           │
 │                                                         │
-│  Messages.app ← → chat.db ← → imsg serve (:8080)       │
+│  Messages.app ← → chat.db ← → imsg serve (:13197)      │
 │                                    │                    │
 │                    ┌───────────────┼───────────────┐    │
 │                    │ HTTP API      │ SSE stream    │    │
@@ -193,7 +199,7 @@ Config lives at `~/.config/itui/config.json`:
 
 ```json
 {
-  "server": "http://127.0.0.1:8080",
+  "server": "http://127.0.0.1:13197",
   "token": null,
   "defaultChatId": null,
   "reconnectDelayMs": 2000
@@ -235,7 +241,7 @@ imsg watch [--chat-id <id>] [--contacts] [--attachments] [--json]
 imsg send --to <handle> --text "hi" [--service imessage|sms|auto]
 imsg react --chat-id <id> --reaction like
 imsg contacts [--handle +15551234567] [--json]
-imsg serve [--host 127.0.0.1] [--port 8080]
+imsg serve [--host 127.0.0.1] [--port 13197]
 imsg rpc   # JSON-RPC over stdio
 ```
 
@@ -265,7 +271,7 @@ make web-build          # build web/ and copy into Sources/imsg/Resources/web/
 
 # Browser client with a separate backend
 cp web/.env.example web/.env.local
-# set VITE_IMSG_PROXY_TARGET=http://127.0.0.1:8080
+# set VITE_IMSG_PROXY_TARGET=http://127.0.0.1:13197
 
 # TUI client
 cd itui
