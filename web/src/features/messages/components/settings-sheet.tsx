@@ -248,10 +248,6 @@ export function SettingsSheet({
                   type="file"
                 />
 
-                <p className="text-xs text-muted-foreground">
-                  Imported palettes stay local to this browser and do not touch the server.
-                </p>
-
                 <div className="rounded-2xl border border-border/70 bg-muted/30 p-3 text-xs text-muted-foreground">
                   <p className="font-medium text-foreground">Make your own</p>
                   <p className="pt-1">
