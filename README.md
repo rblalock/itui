@@ -39,7 +39,7 @@ The installer:
 - Installs the optional `itui` TUI client when Bun is available
 - Puts `imsg` and, if installed, `itui` in `~/.local/bin`
 - Creates `~/.config/itui/config.json` when the TUI is installed
-- On macOS, offers to install a LaunchAgent so `imsg serve` runs on login
+- On macOS, offers to install a LaunchAgent so `imsg serve` runs on login, and refreshes that daemon automatically on later installer runs
 
 The server defaults to port `13197` (chosen to avoid collisions with the usual
 dev-server ports). Override with `--port` on the CLI or `ITUI_PORT=...` during
@@ -59,7 +59,9 @@ You do not need to clone the repo or use `git` for normal installs or updates.
 **Server / browser runtime (macOS only)**
 - macOS 14+ with Messages.app signed in
 - Xcode Command Line Tools (`xcode-select --install`)
-- Full Disk Access for the app or shell that launches `imsg`
+- Full Disk Access for the thing that launches `imsg`
+  - terminal app if you run `imsg serve` yourself
+  - `~/.itui/bin/imsg` if you use the LaunchAgent / background daemon
 - Optional: Node.js `20.19+` + npm if you want the installer to rebuild the bundled browser app from source
 
 **TUI client (optional)**
@@ -88,6 +90,14 @@ launchctl kickstart -k gui/$(id -u)/com.r44vc0rp.itui.imsg
 
 # inspect status
 launchctl print gui/$(id -u)/com.r44vc0rp.itui.imsg
+```
+
+For daemon mode, grant Full Disk Access to `~/.itui/bin/imsg` itself, not just your terminal app.
+
+If names and avatars are missing, run this once locally on the Mac to trigger the Contacts prompt:
+
+```bash
+~/.itui/bin/imsg contacts --json
 ```
 
 ### Optional Tailscale Serve
@@ -268,8 +278,9 @@ imsg rpc   # JSON-RPC over stdio
 On first run, macOS will prompt you for:
 
 1. **Full Disk Access** — required to read `~/Library/Messages/chat.db`. Grant to your terminal app in System Settings → Privacy & Security → Full Disk Access.
+   If you use the LaunchAgent, also grant Full Disk Access to `~/.itui/bin/imsg`.
 
-2. **Contacts** — optional, for resolving names + avatars. A prompt appears on first use; deny and handles show as phone numbers.
+2. **Contacts** — optional, for resolving names + avatars. Run `~/.itui/bin/imsg contacts --json` locally once to trigger the prompt; deny and handles show as phone numbers.
 
 3. **Automation (Messages.app)** — required only for sending. A prompt appears on first send.
 

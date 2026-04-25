@@ -83,8 +83,9 @@ DAEMON_LABEL="com.r44vc0rp.itui.imsg"
 DAEMON_PLIST="$HOME/Library/LaunchAgents/$DAEMON_LABEL.plist"
 DAEMON_LOG_DIR="$HOME/.itui/logs"
 
-# Tracks whether we actually installed the daemon; controls the final message.
-DAEMON_INSTALLED=0
+# Tracks daemon state for installer output.
+DAEMON_CONFIGURED=0
+DAEMON_HEALTHY=0
 
 # ── Preflight ─────────────────────────────────────────────────────────────────
 
@@ -374,17 +375,43 @@ install_daemon() {
 PLIST
 
   chmod 644 "$DAEMON_PLIST"
+  DAEMON_CONFIGURED=1
+
+  daemon_healthcheck() {
+    local attempts=0
+    while [[ "$attempts" -lt 10 ]]; do
+      if curl -fsS "http://127.0.0.1:${port}/api/chats?limit=1" >/dev/null 2>&1; then
+        return 0
+      fi
+      sleep 1
+      attempts=$((attempts + 1))
+    done
+    return 1
+  }
+
+  daemon_started() {
+    if daemon_healthcheck; then
+      info "  Loaded LaunchAgent — running on 127.0.0.1:${port}"
+      DAEMON_HEALTHY=1
+      return 0
+    fi
+
+    warn "LaunchAgent loaded, but the server did not become healthy."
+    dim "If you want boot persistence, grant Full Disk Access to:"
+    dim "  $bin"
+    dim "Then restart it with:"
+    dim "  launchctl kickstart -k gui/\$UID/$DAEMON_LABEL"
+    return 1
+  }
 
   if launchctl bootstrap "gui/$UID" "$DAEMON_PLIST" 2>/dev/null; then
     launchctl kickstart -k "gui/$UID/$DAEMON_LABEL" &>/dev/null || true
-    info "  Loaded LaunchAgent — running on 127.0.0.1:${port}"
-    DAEMON_INSTALLED=1
+    daemon_started || true
   else
     launchctl bootout "gui/$UID" "$DAEMON_PLIST" 2>/dev/null || true
     if launchctl bootstrap "gui/$UID" "$DAEMON_PLIST" 2>/dev/null; then
       launchctl kickstart -k "gui/$UID/$DAEMON_LABEL" &>/dev/null || true
-      info "  Loaded LaunchAgent — running on 127.0.0.1:${port}"
-      DAEMON_INSTALLED=1
+      daemon_started || true
     else
       warn "Wrote plist but launchctl bootstrap failed."
       dim "Load manually: launchctl bootstrap gui/\$UID $DAEMON_PLIST"
@@ -399,6 +426,11 @@ prompt_daemon_install() {
     1|yes|true|YES|TRUE)  return 0 ;;
     0|no|false|NO|FALSE)  return 1 ;;
   esac
+
+  if [[ -f "$DAEMON_PLIST" ]]; then
+    info "Refreshing existing LaunchAgent…"
+    return 0
+  fi
 
   # No TTY on stdin (piped install). We deliberately don't read from /dev/tty
   # here — installing a persistent background daemon should be opt-in via env
@@ -438,7 +470,7 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
   echo "  The imsg server reads your Messages database and sends messages"
   echo "  via AppleScript. You'll need to grant:"
   echo ""
-  if [[ "$DAEMON_INSTALLED" -eq 1 ]]; then
+  if [[ "$DAEMON_CONFIGURED" -eq 1 ]]; then
     # When run under launchd, TCC applies to the imsg binary itself, not the
     # parent terminal. Grant has to target the binary path explicitly.
     echo "    1. Full Disk Access     → System Settings → Privacy → Full Disk Access"
@@ -449,7 +481,8 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
     echo "       (for your terminal app — iTerm2, Terminal.app, etc.)"
   fi
   echo ""
-  echo "    2. Contacts Access      → granted on first run (a prompt will appear)"
+  echo "    2. Contacts Access      → grant by running locally once:"
+  echo "       $IMSG_BIN contacts --json"
   echo ""
   echo "    3. Automation (Messages) → granted on first send (a prompt will appear)"
   echo ""
@@ -489,7 +522,7 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
     done <<< "$LAN_ENTRIES"
 
     echo ""
-    if [[ "$DAEMON_INSTALLED" -eq 1 ]]; then
+    if [[ "$DAEMON_CONFIGURED" -eq 1 ]]; then
       dim "The daemon binds to 127.0.0.1 only (no auth on the server yet)."
       dim "To reach a LAN URL from another machine, either:"
       dim "  • SSH tunnel (recommended):"
@@ -515,8 +548,12 @@ echo ""
 echo "  Quick start:"
 echo ""
 if [[ "$(uname -s)" == "Darwin" ]]; then
-  if [[ "$DAEMON_INSTALLED" -eq 1 ]]; then
+  if [[ "$DAEMON_HEALTHY" -eq 1 ]]; then
     echo "    1. Server is running in the background (LaunchAgent)"
+  elif [[ "$DAEMON_CONFIGURED" -eq 1 ]]; then
+    echo "    1. LaunchAgent is installed, but still needs permissions or a restart"
+    echo "       grant Full Disk Access to: $IMSG_BIN"
+    echo "       then run: launchctl kickstart -k gui/\$UID/$DAEMON_LABEL"
   else
     echo "    1. Start the web app:  imsg serve --host 127.0.0.1 --port ${DEFAULT_PORT}"
   fi
@@ -524,7 +561,7 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
   if [[ "$HAS_BUN" -eq 1 ]]; then
     echo "    3. Optional TUI:       itui"
   fi
-  if [[ "$DAEMON_INSTALLED" -eq 1 ]]; then
+  if [[ "$DAEMON_CONFIGURED" -eq 1 ]]; then
     echo ""
     echo "  Daemon controls:"
     echo "    Logs:      tail -f $DAEMON_LOG_DIR/imsg.log"

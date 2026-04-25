@@ -21,7 +21,8 @@
 - Installed browser runtime:
   - `imsg serve --host 127.0.0.1 --port 13197`
   - open `http://127.0.0.1:13197`
-  - if launching over SSH or another background context, run it once locally first so macOS can surface Contacts and Automation prompts
+  - if launching over SSH or another background context, run `~/.itui/bin/imsg contacts --json` once locally so macOS can surface the Contacts prompt
+  - for LaunchAgent / daemon mode, Full Disk Access must be granted to `~/.itui/bin/imsg`, not just the terminal app
 - Frontend dev loop:
   - keep an `imsg serve` instance running locally or on a reachable macOS host
   - copy `web/.env.example` to `web/.env.local`
@@ -61,4 +62,5 @@
 
 ## Security & macOS Permissions
 - The tool needs read-only access to `~/Library/Messages/chat.db`; ensure the terminal has Full Disk Access before running tests that touch the DB.
+- For installed daemon mode, Full Disk Access must also be granted to `~/.itui/bin/imsg`.
 - Sending requires Automation permission for Messages.app and SMS relay configured in macOS/iOS; document any manual steps needed for reviewers.

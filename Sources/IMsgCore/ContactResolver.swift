@@ -70,10 +70,10 @@ public actor ContactResolver {
   /// Loads the contacts cache if not already loaded. Safe to call multiple times — only the
   /// first call performs the actual enumeration. Permission errors are swallowed so the
   /// rest of the app keeps working against un-resolved handles.
-  public func loadIfNeeded() {
+  public func loadIfNeeded() async {
     guard !loaded else { return }
     loaded = true
-    (authorization, records) = ContactResolver.fetchAllContacts()
+    (authorization, records) = await ContactResolver.fetchAllContacts()
     index = ContactResolver.buildIndex(records: records)
   }
 
@@ -93,8 +93,8 @@ public actor ContactResolver {
   public func resolve(
     _ handle: String,
     delivery: AvatarDelivery = .filePath
-  ) -> ResolvedContact {
-    loadIfNeeded()
+  ) async -> ResolvedContact {
+    await loadIfNeeded()
 
     guard let record = record(for: handle) else {
       return ResolvedContact.unresolved(handle: handle)
@@ -134,22 +134,22 @@ public actor ContactResolver {
   public func resolveMany(
     _ handles: [String],
     delivery: AvatarDelivery = .filePath
-  ) -> [String: ResolvedContact] {
+  ) async -> [String: ResolvedContact] {
     var result: [String: ResolvedContact] = [:]
     result.reserveCapacity(handles.count)
     for handle in handles {
-      result[handle] = resolve(handle, delivery: delivery)
+      result[handle] = await resolve(handle, delivery: delivery)
     }
     return result
   }
 
   /// Returns every resolvable contact in the local Contacts store.
-  public func allContacts(delivery: AvatarDelivery = .filePath) -> [ResolvedContact] {
-    loadIfNeeded()
+  public func allContacts(delivery: AvatarDelivery = .filePath) async -> [ResolvedContact] {
+    await loadIfNeeded()
     var contacts: [ResolvedContact] = []
     contacts.reserveCapacity(records.count)
     for record in records {
-      let contact = resolve(record.canonicalKey, delivery: delivery)
+      let contact = await resolve(record.canonicalKey, delivery: delivery)
       contacts.append(contact)
     }
     return contacts
@@ -157,8 +157,8 @@ public actor ContactResolver {
 
   /// Legacy API used by the existing web UI: returns a handle -> display-name map. Kept
   /// stable so older clients keep working.
-  public func nameMap() -> [String: String] {
-    loadIfNeeded()
+  public func nameMap() async -> [String: String] {
+    await loadIfNeeded()
     var table: [String: String] = [:]
     for (key, idx) in index {
       let record = records[idx]
@@ -171,8 +171,8 @@ public actor ContactResolver {
 
   /// Reads the raw avatar bytes for a handle from the on-disk cache, exporting on demand if
   /// the file is not yet materialized. Used by the HTTP avatar endpoint.
-  public func avatarData(for handle: String) -> (data: Data, mime: String)? {
-    loadIfNeeded()
+  public func avatarData(for handle: String) async -> (data: Data, mime: String)? {
+    await loadIfNeeded()
     guard
       let record = record(for: handle),
       let data = record.thumbnailData,
@@ -336,9 +336,18 @@ public actor ContactResolver {
     return index
   }
 
-  private static func fetchAllContacts() -> (ContactAuthorizationStatus, [ContactRecord]) {
+  private static func fetchAllContacts() async -> (ContactAuthorizationStatus, [ContactRecord]) {
     let store = CNContactStore()
-    let status = CNContactStore.authorizationStatus(for: .contacts)
+    var status = CNContactStore.authorizationStatus(for: .contacts)
+
+    if status == .notDetermined {
+      _ = await withCheckedContinuation { continuation in
+        store.requestAccess(for: .contacts) { granted, _ in
+          continuation.resume(returning: granted)
+        }
+      }
+      status = CNContactStore.authorizationStatus(for: .contacts)
+    }
 
     let mappedStatus: ContactAuthorizationStatus
     switch status {
@@ -428,5 +437,4 @@ public actor ContactResolver {
     return (mappedStatus, records)
   }
 }
-
 
