@@ -312,16 +312,21 @@ export const applyChatActivity = <
     return chats
   }
 
-  const updated: T = {
-    ...chats[index]!,
-    last_message_at: createdAt,
-    preview,
-  }
-
-  const nextChats = [...chats]
-  nextChats.splice(index, 1)
-  nextChats.unshift(updated)
-  return nextChats
+  return [...chats]
+    .map((chat) =>
+      chat.id === chatId
+        ? {
+            ...chat,
+            last_message_at: createdAt,
+            preview,
+          }
+        : chat
+    )
+    .sort(
+      (left, right) =>
+        new Date(right.last_message_at).getTime() -
+        new Date(left.last_message_at).getTime()
+    )
 }
 
 export const compareComposerAttachments = (

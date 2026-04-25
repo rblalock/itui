@@ -50,24 +50,24 @@
 
 :root {
   --app-font-scale: 1;
-  --app-text-screen-title: calc(1.125rem * var(--app-font-scale));
-  --app-leading-screen-title: calc(1.5rem * var(--app-font-scale));
-  --app-text-header-title: calc(1.0625rem * var(--app-font-scale));
-  --app-leading-header-title: calc(1.4375rem * var(--app-font-scale));
-  --app-text-header-meta: calc(0.75rem * var(--app-font-scale));
-  --app-leading-header-meta: calc(1rem * var(--app-font-scale));
-  --app-text-sidebar-title: calc(0.9375rem * var(--app-font-scale));
-  --app-leading-sidebar-title: calc(1.25rem * var(--app-font-scale));
-  --app-text-sidebar-preview: calc(0.8125rem * var(--app-font-scale));
-  --app-leading-sidebar-preview: calc(1.25rem * var(--app-font-scale));
-  --app-text-supporting: calc(0.875rem * var(--app-font-scale));
-  --app-leading-supporting: calc(1.25rem * var(--app-font-scale));
-  --app-text-message: calc(0.9375rem * var(--app-font-scale));
-  --app-leading-message: calc(1.5rem * var(--app-font-scale));
-  --app-text-meta: calc(0.6875rem * var(--app-font-scale));
-  --app-leading-meta: calc(1rem * var(--app-font-scale));
-  --app-text-day-divider: calc(0.625rem * var(--app-font-scale));
-  --app-leading-day-divider: calc(0.875rem * var(--app-font-scale));
+  --app-text-screen-title: 1.125rem;
+  --app-leading-screen-title: 1.5rem;
+  --app-text-header-title: 1.0625rem;
+  --app-leading-header-title: 1.4375rem;
+  --app-text-header-meta: 0.75rem;
+  --app-leading-header-meta: 1rem;
+  --app-text-sidebar-title: 0.9375rem;
+  --app-leading-sidebar-title: 1.25rem;
+  --app-text-sidebar-preview: 0.8125rem;
+  --app-leading-sidebar-preview: 1.25rem;
+  --app-text-supporting: 0.875rem;
+  --app-leading-supporting: 1.25rem;
+  --app-text-message: 0.9375rem;
+  --app-leading-message: 1.5rem;
+  --app-text-meta: 0.6875rem;
+  --app-leading-meta: 1rem;
+  --app-text-day-divider: 0.625rem;
+  --app-leading-day-divider: 0.875rem;
   --background: oklch(0.985 0.004 240);
   --foreground: oklch(0.245 0.014 248);
   --card: oklch(0.995 0.002 240);
@@ -158,6 +158,7 @@
   }
   body {
     @apply text-foreground antialiased;
+
     background:
       radial-gradient(
         circle at top left,

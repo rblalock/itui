@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
@@ -27,10 +27,36 @@ import { ConversationThread } from "@/features/messages/components/conversation-
 import { MessageComposer } from "@/features/messages/components/message-composer"
 import { ThreadAvatar } from "@/features/messages/components/thread-avatar"
 import { useMessagesController } from "@/features/messages/hooks/use-messages-controller"
+import { useMessageShortcuts } from "@/features/messages/hooks/use-message-shortcuts"
+
+const isVisibleElement = (element: HTMLElement | null) =>
+  element != null &&
+  element.getClientRects().length > 0 &&
+  window.getComputedStyle(element).visibility !== "hidden"
+
+const focusTextControl = (element: HTMLInputElement | HTMLTextAreaElement | null) => {
+  if (element == null || !isVisibleElement(element)) {
+    return false
+  }
+
+  element.focus()
+  const position = element.value.length
+
+  if (typeof element.setSelectionRange === "function") {
+    element.setSelectionRange(position, position)
+  }
+
+  if (element instanceof HTMLInputElement) {
+    element.select()
+  }
+
+  return true
+}
 
 export function MessagesScreen() {
   const [isDetailsOpen, setIsDetailsOpen] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [pendingSearchFocus, setPendingSearchFocus] = useState(false)
   const controller = useMessagesController()
   const {
     activeConversation,
@@ -41,6 +67,93 @@ export function MessagesScreen() {
     onSetSidebarOpen,
     sidebar,
   } = controller
+
+  const focusConversationSearch = useCallback(() => {
+    const desktopSearch = document.getElementById(
+      "conversation-search-desktop"
+    ) as HTMLInputElement | null
+    const mobileSearch = document.getElementById(
+      "conversation-search-mobile"
+    ) as HTMLInputElement | null
+
+    if (focusTextControl(desktopSearch) || focusTextControl(mobileSearch)) {
+      setPendingSearchFocus(false)
+      return
+    }
+
+    setPendingSearchFocus(true)
+    onSetSidebarOpen(true)
+  }, [onSetSidebarOpen])
+
+  const focusComposer = useCallback(() => {
+    if (!activeConversation) {
+      return
+    }
+
+    const draftField = document.getElementById(
+      "message-draft"
+    ) as HTMLTextAreaElement | null
+    focusTextControl(draftField)
+  }, [activeConversation])
+
+  const handleAddAttachmentShortcut = useCallback(() => {
+    if (!activeConversation) {
+      return
+    }
+
+    composer.onAddAttachment()
+  }, [activeConversation, composer])
+
+  const navigateConversation = useCallback(
+    (direction: "next" | "previous") => {
+      if (sidebar.visibleThreads.length === 0) {
+        return
+      }
+
+      const currentIndex = sidebar.visibleThreads.findIndex(
+        (thread) => thread.id === sidebar.selectedThreadId
+      )
+      const fallbackIndex = direction === "next" ? 0 : sidebar.visibleThreads.length - 1
+      const nextIndex =
+        currentIndex === -1
+          ? fallbackIndex
+          : Math.min(
+              sidebar.visibleThreads.length - 1,
+              Math.max(0, currentIndex + (direction === "next" ? 1 : -1))
+            )
+      const nextThread = sidebar.visibleThreads[nextIndex]
+
+      if (!nextThread || nextThread.id === sidebar.selectedThreadId) {
+        return
+      }
+
+      sidebar.onSelectThread(nextThread.id)
+    },
+    [sidebar]
+  )
+
+  useEffect(() => {
+    if (!pendingSearchFocus || !sidebar.isOpen) {
+      return
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      focusConversationSearch()
+    })
+
+    return () => {
+      window.cancelAnimationFrame(frame)
+    }
+  }, [focusConversationSearch, pendingSearchFocus, sidebar.isOpen])
+
+  useMessageShortcuts({
+    blocked: composePicker.open || isDetailsOpen || isSettingsOpen,
+    onAddAttachment: handleAddAttachmentShortcut,
+    onFocusComposer: focusComposer,
+    onFocusConversationSearch: focusConversationSearch,
+    onNavigateConversation: navigateConversation,
+    onOpenCompose,
+  })
 
   return (
     <>
@@ -228,7 +341,6 @@ export function MessagesScreen() {
                   onRemoveAttachment={composer.onRemoveAttachment}
                   onSend={composer.onSend}
                   sendError={composer.sendError}
-                  sendStatusMessage={composer.sendStatusMessage}
                 />
               </section>
             </div>

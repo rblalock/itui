@@ -101,25 +101,25 @@ function readStoredThemeState(
   storageKey: string,
   defaultTheme: string
 ): StoredThemeState {
-  const storedTheme = localStorage.getItem(storageKey)
-  if (!storedTheme) {
-    return {
-      fontScale: DEFAULT_FONT_SCALE,
-      importedTheme: null,
-      themeId: defaultTheme,
-    }
-  }
-
-  const legacyThemeId = getLegacyThemeId(storedTheme)
-  if (legacyThemeId) {
-    return {
-      fontScale: DEFAULT_FONT_SCALE,
-      importedTheme: null,
-      themeId: legacyThemeId,
-    }
-  }
-
   try {
+    const storedTheme = localStorage.getItem(storageKey)
+    if (!storedTheme) {
+      return {
+        fontScale: DEFAULT_FONT_SCALE,
+        importedTheme: null,
+        themeId: defaultTheme,
+      }
+    }
+
+    const legacyThemeId = getLegacyThemeId(storedTheme)
+    if (legacyThemeId) {
+      return {
+        fontScale: DEFAULT_FONT_SCALE,
+        importedTheme: null,
+        themeId: legacyThemeId,
+      }
+    }
+
     const parsed = JSON.parse(storedTheme) as Partial<StoredThemeState>
     const importedTheme = isStoredImportedTheme(parsed.importedTheme)
       ? parsed.importedTheme
@@ -147,7 +147,11 @@ function persistThemeState(
   storageKey: string,
   nextState: StoredThemeState
 ) {
-  localStorage.setItem(storageKey, JSON.stringify(nextState))
+  try {
+    localStorage.setItem(storageKey, JSON.stringify(nextState))
+  } catch {
+    // Ignore storage failures so theme initialization and rendering stay usable.
+  }
 }
 
 export function ThemeProvider({

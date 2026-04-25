@@ -82,6 +82,11 @@ public struct MessageSender {
     try sendViaAppleScript(resolved, chatTarget: chatTarget, useChat: useChat)
   }
 
+  /// Attempts a direct send over iMessage first, then falls back to SMS only when the
+  /// initial failure indicates the recipient is not reachable over iMessage.
+  ///
+  /// SMS fallback on macOS requires Text Message Forwarding / SMS relay from a paired
+  /// iPhone to be enabled on the host Mac.
   private func sendDirectMessageAutomatically(_ resolved: MessageSendOptions) throws {
     var preferred = resolved
     preferred.service = .imessage
@@ -91,6 +96,10 @@ public struct MessageSender {
       return
     } catch let error as IMsgError {
       guard shouldFallbackAutoSendToSMS(error: error, recipient: resolved.recipient) else {
+        throw error
+      }
+
+      guard resolved.attachmentPath.isEmpty else {
         throw error
       }
     }

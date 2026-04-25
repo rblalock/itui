@@ -165,6 +165,53 @@ func messageSenderFallsBackToSMSForPhoneRecipientsWhenAutoIMessageFails() throws
 }
 
 @Test
+func messageSenderDoesNotFallbackToSMSWhenAttachmentIsPresent() throws {
+  var invocations: [[String]] = []
+  let fileManager = FileManager.default
+  let attachmentsSubdirectory = fileManager.temporaryDirectory.appendingPathComponent(
+    UUID().uuidString
+  )
+  try fileManager.createDirectory(at: attachmentsSubdirectory, withIntermediateDirectories: true)
+  defer { try? fileManager.removeItem(at: attachmentsSubdirectory) }
+  let sourceDir = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  try fileManager.createDirectory(at: sourceDir, withIntermediateDirectories: true)
+  defer { try? fileManager.removeItem(at: sourceDir) }
+  let sourceFile = sourceDir.appendingPathComponent("photo.jpg")
+  try Data("payload".utf8).write(to: sourceFile)
+
+  let sender = MessageSender(
+    runner: { _, args in
+      invocations.append(args)
+      throw IMsgError.appleScriptFailure("Can’t get buddy +16502530000 of service")
+    },
+    attachmentsSubdirectoryProvider: { attachmentsSubdirectory }
+  )
+
+  do {
+    try sender.send(
+      MessageSendOptions(
+        recipient: "+16502530000",
+        text: "hi",
+        attachmentPath: sourceFile.path,
+        service: .auto,
+        region: "US"
+      )
+    )
+    #expect(Bool(false))
+  } catch let error as IMsgError {
+    #expect(
+      error.errorDescription?.contains("Can’t get buddy +16502530000 of service") == true
+    )
+  } catch {
+    #expect(Bool(false))
+  }
+
+  #expect(invocations.count == 1)
+  #expect(invocations[0][2] == "imessage")
+  #expect(invocations[0][4] == "1")
+}
+
+@Test
 func messageSenderUsesChatIdentifier() throws {
   let fileManager = FileManager.default
   let tempDir = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString)

@@ -40,7 +40,6 @@ export function MessageComposer({
   onRemoveAttachment,
   onSend,
   sendError,
-  sendStatusMessage,
 }: {
   activeConversation: ActiveConversation | null
   composerAttachments: ComposerAttachment[]
@@ -59,7 +58,6 @@ export function MessageComposer({
   onRemoveAttachment: (attachmentId: string) => void
   onSend: () => void | Promise<void>
   sendError?: string | null
-  sendStatusMessage?: string | null
 }) {
   const focusDraftField = (form: HTMLFormElement | null) => {
     requestAnimationFrame(() => {
@@ -78,6 +76,12 @@ export function MessageComposer({
   }
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === "Escape") {
+      event.preventDefault()
+      event.currentTarget.blur()
+      return
+    }
+
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault()
       void onSend()
@@ -101,10 +105,6 @@ export function MessageComposer({
       <div className="flex flex-col gap-2">
         {sendError ? (
           <p className="px-1 text-sm text-destructive">{sendError}</p>
-        ) : sendStatusMessage ? (
-          <p className="px-1 text-sm text-muted-foreground">
-            {sendStatusMessage}
-          </p>
         ) : null}
 
         <input

@@ -114,7 +114,7 @@ describe("conversation message reconciliation", () => {
     )
   })
 
-  it("moves active chats to the front while updating previews", () => {
+  it("keeps chats sorted by activity while updating previews", () => {
     const next = applyChatActivity(
       [
         {
@@ -136,5 +136,29 @@ describe("conversation message reconciliation", () => {
     expect(next[0]?.id).toBe(2)
     expect(next[0]?.preview).toBe("Fresh preview")
     expect(next[0]?.last_message_at).toBe("2026-04-17T13:00:00.000Z")
+  })
+
+  it("does not jump an older chat to the front when reloading it", () => {
+    const next = applyChatActivity(
+      [
+        {
+          id: 1,
+          last_message_at: "2026-04-17T12:00:00.000Z",
+          preview: "Newest preview",
+        },
+        {
+          id: 2,
+          last_message_at: "2026-04-17T11:00:00.000Z",
+          preview: "Older preview",
+        },
+      ],
+      2,
+      "2026-04-17T11:00:00.000Z",
+      "Still older"
+    )
+
+    expect(next[0]?.id).toBe(1)
+    expect(next[1]?.id).toBe(2)
+    expect(next[1]?.preview).toBe("Still older")
   })
 })

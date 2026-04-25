@@ -69,7 +69,6 @@ export function useMessageComposer({
   const [draft, setDraft] = useState("")
   const [isSending, setIsSending] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
-  const [sendStatusMessage, setSendStatusMessage] = useState<string | null>(null)
 
   const {
     appendDraftMessage,
@@ -112,7 +111,6 @@ export function useMessageComposer({
     isSending,
     onQueueFiles: () => {
       setSendError(null)
-      setSendStatusMessage(null)
     },
   })
   const { resetAttachments } = composerAttachments
@@ -120,7 +118,6 @@ export function useMessageComposer({
   const resetComposerState = useCallback(() => {
     setDraft("")
     setSendError(null)
-    setSendStatusMessage(null)
     resetAttachments()
   }, [resetAttachments])
 
@@ -159,27 +156,21 @@ export function useMessageComposer({
       conversation: ActiveConversation,
       queuedBatches: QueuedSendBatch[]
     ) => {
-      const total = queuedBatches.length
-
       for (const [index, batch] of queuedBatches.entries()) {
-          const baseTarget =
-            conversation.kind === "thread"
-              ? {
-                  chatGuid: conversation.guid,
-                  chatId: conversation.id,
-                  chatIdentifier: conversation.identifier,
-                }
-              : {
-                  service: conversation.service,
-                  to: conversation.handle,
-                }
+        const baseTarget =
+          conversation.kind === "thread"
+            ? {
+                chatGuid: conversation.guid,
+                chatId: conversation.id,
+                chatIdentifier: conversation.identifier,
+              }
+            : {
+                service: conversation.service,
+                to: conversation.handle,
+              }
 
         try {
           if (batch.attachments.length === 0) {
-            setSendStatusMessage(
-              total === 1 ? "Sending message…" : `Sending ${index + 1} of ${total}…`
-            )
-
             await service.send({
               ...baseTarget,
               text: batch.text,
@@ -189,19 +180,7 @@ export function useMessageComposer({
 
           const attachment = batch.attachments[0]!
 
-          setSendStatusMessage(
-            total === 1
-              ? "Uploading attachment…"
-              : `Uploading ${index + 1} of ${total}…`
-          )
-
           const stagedUpload = await service.uploadAttachment(attachment.file)
-
-          setSendStatusMessage(
-            total === 1
-              ? "Sending attachment…"
-              : `Sending ${index + 1} of ${total}…`
-          )
 
           await service.send({
             ...baseTarget,
@@ -210,22 +189,23 @@ export function useMessageComposer({
           })
         } catch (error) {
           const errorMessage = describeError(error)
-          updateLocalMessageState(
-            conversation,
-            batch.clientId,
-            "failed",
-            errorMessage
-          )
+          queuedBatches
+            .slice(index)
+            .forEach((pendingBatch) => {
+              updateLocalMessageState(
+                conversation,
+                pendingBatch.clientId,
+                "failed",
+                errorMessage
+              )
+            })
           setSendError(errorMessage)
-          setSendStatusMessage(null)
           throw error
         }
       }
 
       setSendError(null)
-      setSendStatusMessage("Syncing conversation…")
       await completeSuccessfulSend(conversation)
-      setSendStatusMessage(null)
     },
     [completeSuccessfulSend, service, updateLocalMessageState]
   )
@@ -329,6 +309,5 @@ export function useMessageComposer({
     onSend,
     resetComposerState,
     sendError,
-    sendStatusMessage,
   }
 }

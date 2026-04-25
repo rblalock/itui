@@ -20,6 +20,7 @@ export function useMessagesRealtime({
   service: MessagesService
 }) {
   const hasStreamOpenedRef = useRef(false)
+  const intentionalStopRef = useRef(false)
   const needsStreamResyncRef = useRef(false)
 
   useEffect(() => {
@@ -30,17 +31,22 @@ export function useMessagesRealtime({
     const stream = service.createEventStream(
       {
         onClose: () => {
-          needsStreamResyncRef.current = hasStreamOpenedRef.current
+          if (!intentionalStopRef.current) {
+            needsStreamResyncRef.current = hasStreamOpenedRef.current
+          }
           onSetConnectionState("offline")
         },
         onError: () => {
-          needsStreamResyncRef.current = true
+          if (!intentionalStopRef.current) {
+            needsStreamResyncRef.current = true
+          }
           onSetConnectionState("offline")
         },
         onMessage: onIncomingMessage,
         onOpen: () => {
           const shouldResync =
-            hasStreamOpenedRef.current || needsStreamResyncRef.current
+            !intentionalStopRef.current &&
+            (hasStreamOpenedRef.current || needsStreamResyncRef.current)
           hasStreamOpenedRef.current = true
           needsStreamResyncRef.current = false
           onReachabilityChange(true)
@@ -54,9 +60,15 @@ export function useMessagesRealtime({
       3_000
     )
 
+    intentionalStopRef.current = false
     void stream.start()
 
-    return () => stream.stop()
+    return () => {
+      intentionalStopRef.current = true
+      hasStreamOpenedRef.current = false
+      needsStreamResyncRef.current = false
+      stream.stop()
+    }
   }, [
     enabled,
     onIncomingMessage,

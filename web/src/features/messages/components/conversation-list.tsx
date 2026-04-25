@@ -48,6 +48,12 @@ export function ConversationList({
             id={searchInputId}
             name={searchInputId}
             onChange={(event) => onSearchChange(event.currentTarget.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                event.preventDefault()
+                event.currentTarget.blur()
+              }
+            }}
             placeholder="Search"
             value={search}
           />

@@ -34,6 +34,36 @@ const FONT_SCALE_OPTIONS = [
 
 const SHORTCUTS = [
   {
+    description: "Open the new message picker",
+    keys: ["C"],
+    label: "New message",
+  },
+  {
+    description: "Focus the conversation search field",
+    keys: ["/"],
+    label: "Search conversations",
+  },
+  {
+    description: "Jump to the composer",
+    keys: ["R"],
+    label: "Focus composer",
+  },
+  {
+    description: "Open the file picker for attachments",
+    keys: ["U"],
+    label: "Add attachment",
+  },
+  {
+    description: "Move to the next conversation in the list",
+    keys: ["J"],
+    label: "Next conversation",
+  },
+  {
+    description: "Move to the previous conversation in the list",
+    keys: ["K"],
+    label: "Previous conversation",
+  },
+  {
     description: "Send the current message",
     keys: ["Enter"],
     label: "Send",
@@ -49,7 +79,7 @@ const SHORTCUTS = [
     label: "Choose result",
   },
   {
-    description: "Close the current sheet or dialog",
+    description: "Blur the active field or close the current sheet/dialog",
     keys: ["Esc"],
     label: "Close overlay",
   },
