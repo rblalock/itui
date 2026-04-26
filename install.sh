@@ -422,21 +422,41 @@ fi
 echo ""
 echo -e "${BOLD}${GREEN}  ✓ Installation complete${RESET}"
 echo ""
-echo "  Quick start:"
+echo "  What happened:"
 echo ""
 if [[ "$(uname -s)" == "Darwin" ]]; then
-  if [[ "$DAEMON_HEALTHY" -eq 1 ]]; then
-    echo "    1. Server is running in the background (LaunchAgent)"
-  elif [[ "$DAEMON_CONFIGURED" -eq 1 ]]; then
-    echo "    1. LaunchAgent is installed, but still needs permissions or a restart"
-    echo "       grant Full Disk Access to: $IMSG_BIN"
-    echo "       then run: $IMSG_CMD service restart"
-  else
-    echo "    1. Start the web app:  $IMSG_CMD serve --host 127.0.0.1 --port ${DEFAULT_PORT}"
+  echo "    • Installed or updated itui in $INSTALL_DIR"
+  if [[ -n "$IMSG_BIN" ]]; then
+    echo "    • Built imsg at $IMSG_BIN"
   fi
-  echo "    2. Open in browser:    http://127.0.0.1:${DEFAULT_PORT}"
+  if [[ "$DAEMON_CONFIGURED" -eq 1 ]]; then
+    echo "    • Installed the user LaunchAgent for 127.0.0.1:${DEFAULT_PORT}"
+  else
+    echo "    • Did not install the background LaunchAgent"
+  fi
+  echo ""
+  echo "  Next steps:"
+  echo ""
+  if [[ "$DAEMON_HEALTHY" -eq 1 ]]; then
+    echo "    • Check the service:  $IMSG_CMD service status"
+  elif [[ "$DAEMON_CONFIGURED" -eq 1 ]]; then
+    echo "    • Open permissions:   $IMSG_CMD service permissions"
+    echo "    • Grant Full Disk Access to:"
+    echo "       $IMSG_BIN"
+    echo "    • Restart service:    $IMSG_CMD service restart"
+    echo "    • Check status:       $IMSG_CMD service status"
+  else
+    echo "    • Grant Full Disk Access to your terminal app"
+    echo "    • Start the web app:  $IMSG_CMD serve --host 127.0.0.1 --port ${DEFAULT_PORT}"
+  fi
+  echo "    • Open in browser:    http://127.0.0.1:${DEFAULT_PORT}"
+  echo ""
+  echo "  If Contacts names or avatars are missing, run this once from the Mac desktop:"
+  echo "    $IMSG_BIN contacts --json"
   if [[ "$HAS_BUN" -eq 1 ]]; then
-    echo "    3. Optional TUI:       itui"
+    echo ""
+    echo "  Optional TUI:"
+    echo "    itui"
   fi
   if [[ "$DAEMON_CONFIGURED" -eq 1 ]]; then
     echo ""

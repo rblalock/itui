@@ -28,15 +28,45 @@ Recommended install with the background service enabled:
 curl -fsSL https://raw.githubusercontent.com/R44VC0RP/itui/main/install.sh | ITUI_INSTALL_DAEMON=1 bash
 ```
 
-Then open:
+That command installs or updates the repo, builds `imsg`, installs the bundled
+browser app, installs a user LaunchAgent, and starts `imsg serve` on
+`127.0.0.1:13197`. No manual `git` commands are needed for normal installs or
+updates.
+
+After the installer finishes, run:
+
+```bash
+imsg service status
+```
+
+If the status says the web server is not healthy, open the macOS privacy panes:
+
+```bash
+imsg service permissions
+```
+
+Grant Full Disk Access to the installed server binary:
+
+```text
+~/.itui/bin/imsg
+```
+
+Then restart and check again:
+
+```bash
+imsg service restart
+imsg service status
+```
+
+When `imsg service status` shows `Web: healthy`, open:
 
 ```text
 http://127.0.0.1:13197
 ```
 
-The installer builds the Swift server, refreshes the bundled browser app when
-Node.js/npm are available, installs the optional TUI when Bun is available, and
-starts the background service when `ITUI_INSTALL_DAEMON=1` is set.
+Contacts and Automation permissions may still prompt the first time you resolve
+contacts or send a message. Run those steps from the Mac's normal desktop
+session, not only over SSH, so macOS can show permission prompts.
 
 If you do not want the background service, run the installer without
 `ITUI_INSTALL_DAEMON=1` and start the server manually:
