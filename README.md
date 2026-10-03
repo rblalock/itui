@@ -218,6 +218,18 @@ across service restarts; open browsers receive live updates. The importer
 supports both named colors such as `green` and older `color1`–`color6` keys.
 Requires Python 3.11+, systemd user services, and Omarchy's `theme-set` hook.
 
+The server stores one shared palette. If several Omarchy machines publish to
+the same server, the last sync wins for every browser using Follow Omarchy.
+To move theme syncing from a desktop to a laptop, disable it on the desktop:
+
+```bash
+systemctl --user disable --now itui-theme-sync.timer
+mv ~/.config/omarchy/hooks/theme-set.d/itui-theme-set-hook \
+  ~/.config/omarchy/hooks/theme-set.d/itui-theme-set-hook.sample
+```
+
+Then install the integration on the laptop using the same server URL.
+
 Configuration lives in `~/.config/itui/omarchy-theme-sync.json`. To check sync:
 
 ```bash
