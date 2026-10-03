@@ -54,6 +54,8 @@ private final class WatchState: @unchecked Sendable {
   private var cursor: Int64
   private var sources: [DispatchSourceFileSystemObject] = []
   private var pending = false
+  private var timer: DispatchSourceTimer?
+  private var stopped = false
 
   init(
     store: MessageStore,
@@ -81,6 +83,12 @@ private final class WatchState: @unchecked Sendable {
       }
     }
 
+    let timer = DispatchSource.makeTimerSource(queue: queue)
+    timer.schedule(deadline: .now() + 2, repeating: 2)
+    timer.setEventHandler { [weak self] in self?.poll() }
+    self.timer = timer
+    timer.resume()
+
     let paths = [store.path, store.path + "-wal", store.path + "-shm"]
     for path in paths {
       if let source = makeSource(path: path) {
@@ -92,6 +100,9 @@ private final class WatchState: @unchecked Sendable {
 
   func stop() {
     queue.async {
+      self.stopped = true
+      self.timer?.cancel()
+      self.timer = nil
       for source in self.sources {
         source.cancel()
       }
@@ -130,17 +141,18 @@ private final class WatchState: @unchecked Sendable {
 
   private func poll() {
     do {
-      let messages = try store.messagesAfter(
-        afterRowID: cursor,
-        chatID: chatID,
-        limit: configuration.batchLimit,
-        includeReactions: configuration.includeReactions
-      )
-      for message in messages {
-        continuation.yield(message)
-        if message.rowID > cursor {
-          cursor = message.rowID
+      guard !stopped else { return }
+      let batchLimit = max(configuration.batchLimit, 1)
+      while true {
+        let messages = try store.messagesAfter(
+          afterRowID: cursor, chatID: chatID, limit: batchLimit,
+          includeReactions: configuration.includeReactions
+        )
+        for message in messages {
+          continuation.yield(message)
+          cursor = max(cursor, message.rowID)
         }
+        if messages.count < batchLimit { break }
       }
     } catch {
       continuation.finish(throwing: error)

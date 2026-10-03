@@ -1,3 +1,5 @@
+import { serverNowISO } from "@/lib/server-clock"
+
 import type {
   Attachment as ImsgAttachment,
   Message as ImsgMessage,
@@ -27,7 +29,9 @@ const cloneComposerAttachmentForLocalMessage = (
   ...attachment,
   errorMessage: undefined,
   previewUrl:
-    attachment.kind === "image" ? URL.createObjectURL(attachment.file) : undefined,
+    attachment.kind === "image"
+      ? URL.createObjectURL(attachment.file)
+      : undefined,
   status: "queued",
 })
 
@@ -48,7 +52,10 @@ const messageAttachmentFromComposerAttachment = (
 
 const localAttachmentSignature = (attachments: ImsgAttachment[]) =>
   attachments
-    .map((attachment) => `${attachmentKind(attachment)}:${attachmentTitle(attachment)}`)
+    .map(
+      (attachment) =>
+        `${attachmentKind(attachment)}:${attachmentTitle(attachment)}`
+    )
     .join("|")
 
 const localMessageSummary = (message: ImsgMessage) => {
@@ -73,7 +80,11 @@ const matchesOptimisticMessage = (
   candidate: ConversationMessage,
   incoming: ImsgMessage
 ) => {
-  if (!candidate.clientId || candidate.is_from_me !== true || incoming.is_from_me !== true) {
+  if (
+    !candidate.clientId ||
+    candidate.is_from_me !== true ||
+    incoming.is_from_me !== true
+  ) {
     return false
   }
 
@@ -96,16 +107,18 @@ const matchesOptimisticMessage = (
     return false
   }
 
-  return (
-    Math.abs(
-      toDate(candidate.created_at).getTime() - toDate(incoming.created_at).getTime()
-    ) <
-    1000 * 90
-  )
+  const elapsed =
+    toDate(incoming.created_at).getTime() -
+    toDate(candidate.created_at).getTime()
+  return elapsed >= -2_000 && elapsed < 90_000
 }
 
 const reactionFromEvent = (message: ImsgMessage): ImsgReaction | null => {
-  if (!message.is_reaction || !message.reaction_emoji || !message.reaction_type) {
+  if (
+    !message.is_reaction ||
+    !message.reaction_emoji ||
+    !message.reaction_type
+  ) {
     return null
   }
 
@@ -179,7 +192,9 @@ export const createOptimisticConversationMessage = ({
   text: string
 }): ConversationMessage => {
   const clientId = nextLocalMessageId()
-  const localAttachments = attachments.map(cloneComposerAttachmentForLocalMessage)
+  const localAttachments = attachments.map(
+    cloneComposerAttachmentForLocalMessage
+  )
 
   return {
     attachments: localAttachments.map(messageAttachmentFromComposerAttachment),
@@ -187,7 +202,7 @@ export const createOptimisticConversationMessage = ({
     // should pass chatId so optimistic messages can reconcile without extra mutation.
     chat_id: chatId ?? -1,
     clientId,
-    created_at: new Date().toISOString(),
+    created_at: serverNowISO(),
     deliveryError: undefined,
     deliveryState: "sending",
     destination_caller_id: undefined,
@@ -204,7 +219,9 @@ export const createOptimisticConversationMessage = ({
   }
 }
 
-export const releaseConversationMessageAssets = (message: ConversationMessage) => {
+export const releaseConversationMessageAssets = (
+  message: ConversationMessage
+) => {
   message.localPayload?.attachments.forEach((attachment) => {
     if (attachment.previewUrl) {
       URL.revokeObjectURL(attachment.previewUrl)
@@ -244,8 +261,16 @@ export const applyIncomingConversationMessage = (
   messages: ConversationMessage[],
   incoming: ImsgMessage
 ): ConversationMessage[] => {
-  if (messages.some((candidate) => candidate.id === incoming.id)) {
-    return messages
+  const existingIndex = messages.findIndex((candidate) =>
+    sameServerMessage(candidate, incoming)
+  )
+  if (existingIndex !== -1) {
+    const next = [...messages]
+    next[existingIndex] = {
+      ...incoming,
+      reconciledClientId: messages[existingIndex]?.reconciledClientId,
+    }
+    return sortConversationMessages(next)
   }
 
   if (incoming.is_reaction && incoming.reacted_to_guid) {
@@ -273,32 +298,57 @@ export const applyIncomingConversationMessage = (
 
   if (optimisticIndex !== -1) {
     const next = [...messages]
-    next[optimisticIndex] = incoming
+    next[optimisticIndex] = {
+      ...incoming,
+      reconciledClientId: messages[optimisticIndex]?.clientId,
+    }
     return sortConversationMessages(next)
   }
 
   return sortConversationMessages([...messages, incoming])
 }
 
+const sameServerMessage = (left: ConversationMessage, right: ImsgMessage) =>
+  !left.clientId &&
+  left.chat_id === right.chat_id &&
+  (left.id === right.id ||
+    Boolean(left.guid && right.guid && left.guid === right.guid))
+
 export const mergeLoadedMessages = (
   current: ConversationMessage[],
   loaded: ImsgMessage[]
 ) => {
-  const nextServerMessages = sortConversationMessages([...loaded])
-  const nextServerMessageIds = new Set(
-    nextServerMessages.map((message) => message.id)
-  )
-  const remainingLocalMessages = current.filter((message) => {
-    if (!message.clientId) {
-      return !nextServerMessageIds.has(message.id)
-    }
-
-    return !nextServerMessages.some((serverMessage) =>
-      matchesOptimisticMessage(message, serverMessage)
+  const serverMessages = current.filter((message) => !message.clientId)
+  for (const message of loaded) {
+    const index = serverMessages.findIndex((candidate) =>
+      sameServerMessage(candidate, message)
     )
+    if (index === -1) serverMessages.push(message)
+    else
+      serverMessages[index] = {
+        ...message,
+        reconciledClientId: serverMessages[index]?.reconciledClientId,
+      }
+  }
+  // Each database row may consume only one optimistic message. Otherwise two
+  // legitimate identical sends disappear when a snapshot contains just one echo.
+  const loadedIds = new Set(loaded.map((message) => message.id))
+  const locals = current.filter((message) => {
+    if (!message.clientId) return false
+    const matchIndex = serverMessages.findIndex(
+      (incoming) =>
+        loadedIds.has(incoming.id) &&
+        !incoming.reconciledClientId &&
+        matchesOptimisticMessage(message, incoming)
+    )
+    if (matchIndex === -1) return true
+    serverMessages[matchIndex] = {
+      ...serverMessages[matchIndex]!,
+      reconciledClientId: message.clientId,
+    }
+    return false
   })
-
-  return sortConversationMessages([...nextServerMessages, ...remainingLocalMessages])
+  return sortConversationMessages([...serverMessages, ...locals])
 }
 
 export const applyChatActivity = <

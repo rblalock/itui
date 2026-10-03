@@ -1,7 +1,12 @@
 # Changelog
 
-## Unreleased
-- fix: dedupe URL balloon preview duplicates in watch stream without cross-chat/schema regressions (#64, thanks @lesaai)
+## 0.5.1 - 2026-10-03
+- feat: follow the current Omarchy palette through a persisted theme API, live browser updates, and a Linux theme hook with retry timer
+- fix: refresh Contacts after changes and on expiry, retry failed loads, and invalidate avatar caches
+- fix: reconcile text and attachments separately and match each sent message only once
+- fix: dedupe browser messages by identity and preserve distinct repeated link sends for every client
+- fix: drain message-watch batches and recover missed file notifications with periodic polling
+- docs: use the rblalock fork for installs, updates, and ongoing development
 - fix: remove non-functional `typing` command and related RPC methods
 - fix: remove unsupported standalone IMCore typing path and stale error branch
 - test: drop typing-specific unit/integration tests with command/RPC surface removal

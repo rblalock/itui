@@ -80,6 +80,7 @@ export type LocalConversationMessagePayload = {
 }
 
 export type ConversationMessage = ImsgMessage & {
+  reconciledClientId?: string
   clientId?: string
   deliveryError?: string
   deliveryState?: ConversationMessageDeliveryState

@@ -12,6 +12,7 @@ final class WebServer: Sendable {
   let cache: ChatCache
   let contactResolver: ContactResolver
   let uploadStager: UploadStager
+  let themeStore = OmarchyThemeStore()
   let host: String
   let port: Int
   let sendMessage: @Sendable (MessageSendOptions) throws -> Void

@@ -228,23 +228,9 @@ extension MessageStore {
 
     return try withConnection { db in
       var messages: [Message] = []
-      let urlBalloonProvider = "com.apple.messages.URLBalloonProvider"
 
       for row in try db.prepare(sql, bindings) {
         let decoded = try decodeMessageRow(row, columns: columns, fallbackChatID: chatID)
-        if decoded.balloonBundleID == urlBalloonProvider,
-          shouldSkipURLBalloonDuplicate(
-            chatID: decoded.chatID,
-            sender: decoded.sender,
-            text: decoded.text,
-            isFromMe: decoded.isFromMe,
-            date: decoded.date,
-            rowID: decoded.rowID
-          )
-        {
-          continue
-        }
-
         let replyToGUID = replyToGUID(
           associatedGuid: decoded.associatedGUID,
           associatedType: decoded.associatedType

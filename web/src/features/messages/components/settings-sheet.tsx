@@ -1,4 +1,4 @@
-import { type ChangeEvent, useMemo, useRef, useState } from "react"
+import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -14,7 +14,12 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
 import { useAppTheme } from "@/components/theme-provider"
 import {
   serializeColorsToml,
@@ -22,7 +27,14 @@ import {
   themeTomlFileName,
   type AppThemePreset,
 } from "@/lib/app-theme"
-import { DownloadIcon, KeyboardIcon, PaletteIcon, Trash2Icon, UploadIcon } from "lucide-react"
+import { ImsgClient, type ContactsList } from "@/lib/imsg"
+import {
+  DownloadIcon,
+  KeyboardIcon,
+  PaletteIcon,
+  Trash2Icon,
+  UploadIcon,
+} from "lucide-react"
 
 const FONT_SCALE_OPTIONS = [
   { label: "Small", value: 0.9 },
@@ -98,6 +110,7 @@ export function SettingsSheet({
     fontScale,
     importThemeFile,
     importedTheme,
+    linkedTheme,
     setFontScale,
     setTheme,
     themeId,
@@ -130,13 +143,17 @@ export function SettingsSheet({
       setStatusMessage(`Imported ${file.name} for this browser.`)
     } catch (error) {
       setStatusTone("error")
-      setStatusMessage(error instanceof Error ? error.message : "Could not import colors.toml.")
+      setStatusMessage(
+        error instanceof Error ? error.message : "Could not import colors.toml."
+      )
     }
   }
 
   const handleDownloadCurrentTheme = () => {
     const contents = serializeColorsToml(activeTheme.palette)
-    const blob = new Blob([`${contents}\n`], { type: "text/plain;charset=utf-8" })
+    const blob = new Blob([`${contents}\n`], {
+      type: "text/plain;charset=utf-8",
+    })
     const href = URL.createObjectURL(blob)
     const anchor = document.createElement("a")
     anchor.href = href
@@ -149,12 +166,12 @@ export function SettingsSheet({
 
   return (
     <Sheet onOpenChange={onOpenChange} open={open}>
-        <SheetContent className="w-full border-border/70 bg-background/98 p-0 sm:max-w-md">
-          <SheetHeader className="gap-2 px-6 pt-6 pb-5">
-            <SheetTitle className="text-[18px] font-semibold tracking-tight">
-              Settings
-            </SheetTitle>
-          </SheetHeader>
+      <SheetContent className="w-full border-border/70 bg-background/98 p-0 sm:max-w-md">
+        <SheetHeader className="gap-2 px-6 pt-6 pb-5">
+          <SheetTitle className="text-[18px] font-semibold tracking-tight">
+            Settings
+          </SheetTitle>
+        </SheetHeader>
 
         <Separator />
 
@@ -169,13 +186,17 @@ export function SettingsSheet({
               <div className="rounded-3xl border border-border/70 bg-muted/35 p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{activeTheme.name}</p>
+                    <p className="truncate text-sm font-medium">
+                      {activeTheme.name}
+                    </p>
                     <p className="pt-1 text-xs text-muted-foreground">
-                      {activeTheme.group === "omarchy"
-                        ? "Official Omarchy preset"
-                        : activeTheme.group === "imported"
-                          ? "Imported from colors.toml"
-                          : "Built-in itui preset"}
+                      {activeTheme.group === "linked"
+                        ? "Follows your Linux desktop automatically"
+                        : activeTheme.group === "omarchy"
+                          ? "Official Omarchy preset"
+                          : activeTheme.group === "imported"
+                            ? "Imported from colors.toml"
+                            : "Built-in itui preset"}
                     </p>
                   </div>
 
@@ -194,14 +215,16 @@ export function SettingsSheet({
                 </div>
 
                 <div className="mt-4 flex flex-wrap gap-2">
-                  {themePreviewSwatches(activeTheme.palette).map((color, index) => (
-                    <span
-                      aria-hidden="true"
-                      className="size-7 rounded-full border border-black/10 shadow-sm"
-                      key={`${activeTheme.id}-${index}`}
-                      style={{ backgroundColor: color }}
-                    />
-                  ))}
+                  {themePreviewSwatches(activeTheme.palette).map(
+                    (color, index) => (
+                      <span
+                        aria-hidden="true"
+                        className="size-7 rounded-full border border-black/10 shadow-sm"
+                        key={`${activeTheme.id}-${index}`}
+                        style={{ backgroundColor: color }}
+                      />
+                    )
+                  )}
                 </div>
 
                 {activeTheme.group === "imported" ? (
@@ -232,6 +255,9 @@ export function SettingsSheet({
 
                     <SelectGroup>
                       <SelectLabel>Omarchy</SelectLabel>
+                      {linkedTheme ? (
+                        <ThemeOptionItem theme={linkedTheme} />
+                      ) : null}
                       {omarchyThemes.map((theme) => (
                         <ThemeOptionItem key={theme.id} theme={theme} />
                       ))}
@@ -256,7 +282,9 @@ export function SettingsSheet({
                 </p>
 
                 <Select
-                  onValueChange={(value) => setFontScale(Number.parseFloat(value))}
+                  onValueChange={(value) =>
+                    setFontScale(Number.parseFloat(value))
+                  }
                   value={fontScale.toFixed(1)}
                 >
                   <SelectTrigger className="w-full">
@@ -265,7 +293,10 @@ export function SettingsSheet({
                   <SelectContent align="start" position="popper">
                     <SelectGroup>
                       {FONT_SCALE_OPTIONS.map((option) => (
-                        <SelectItem key={option.value} value={option.value.toFixed(1)}>
+                        <SelectItem
+                          key={option.value}
+                          value={option.value.toFixed(1)}
+                        >
                           {option.label}
                         </SelectItem>
                       ))}
@@ -312,13 +343,19 @@ export function SettingsSheet({
                 <div className="rounded-2xl border border-border/70 bg-muted/30 p-3 text-xs text-muted-foreground">
                   <p className="font-medium text-foreground">Make your own</p>
                   <p className="pt-1">
-                    Download the current theme, edit the hex values, then import the file back here.
+                    Download the current theme, edit the hex values, then import
+                    the file back here.
                   </p>
                   <p className="pt-2">
-                    Required keys: <code>accent</code>, <code>background</code>, <code>foreground</code>.
+                    Required keys: <code>accent</code>, <code>background</code>,{" "}
+                    <code>foreground</code>.
                   </p>
                   <p className="pt-1">
-                    Optional keys: <code>selection_background</code>, <code>selection_foreground</code>, <code>color1</code> through <code>color6</code>.
+                    Optional keys: <code>selection_background</code>,{" "}
+                    <code>selection_foreground</code>, <code>red</code>,{" "}
+                    <code>green</code>, <code>yellow</code>, <code>blue</code>,{" "}
+                    <code>magenta</code>, <code>cyan</code>, or{" "}
+                    <code>color1</code> through <code>color6</code>.
                   </p>
                 </div>
 
@@ -335,6 +372,10 @@ export function SettingsSheet({
                 ) : null}
               </div>
             </section>
+
+            <Separator />
+
+            <ContactsSettings open={open} />
 
             <Separator />
 
@@ -400,5 +441,79 @@ function ThemeOptionItem({ theme }: { theme: AppThemePreset }) {
         </span>
       </span>
     </SelectItem>
+  )
+}
+
+function ContactsSettings({ open }: { open: boolean }) {
+  const client = useMemo(() => new ImsgClient(), [])
+  const [contacts, setContacts] = useState<ContactsList | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    void client
+      .listContacts()
+      .then((next) => {
+        if (!cancelled) setContacts(next)
+      })
+      .catch((cause) => {
+        if (!cancelled)
+          setError(
+            cause instanceof Error ? cause.message : "Could not load contacts."
+          )
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [client, open])
+
+  const refresh = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      await client.refreshContacts()
+      const next = await client.listContacts()
+      setContacts(next)
+      window.dispatchEvent(new Event("itui:contacts-changed"))
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "Could not refresh contacts."
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <section className="flex flex-col gap-3">
+      <h3 className="text-sm font-medium">Contacts</h3>
+      <p className="text-xs text-muted-foreground">
+        Names and photos come from Contacts on your Mac and refresh
+        automatically.
+      </p>
+      {contacts ? (
+        <p className="text-xs text-muted-foreground">
+          Access: {contacts.authorization.replaceAll("_", " ")}
+          {contacts.last_updated_at
+            ? ` · Updated ${new Date(contacts.last_updated_at).toLocaleTimeString()}`
+            : ""}
+        </p>
+      ) : null}
+      <Button
+        onClick={() => void refresh()}
+        disabled={busy}
+        variant="outline"
+        type="button"
+      >
+        {busy ? "Refreshing contacts…" : "Refresh contacts"}
+      </Button>
+      {error || contacts?.last_error ? (
+        <p role="status" className="text-xs text-destructive">
+          {error || contacts?.last_error}
+        </p>
+      ) : null}
+    </section>
   )
 }

@@ -70,6 +70,7 @@ export function useMessagesData({
   const [connectionState, setConnectionState] =
     useState<ConnectionState>("connecting")
   const chatsRef = useRef<ChatRow[]>([])
+  const seenEventIdsRef = useRef(new Set<string>())
   const fullMessageChatIdsRef = useRef(new Set<number>())
   const selectedThreadIdRef = useRef<number | null>(null)
   const scrollRef = useRef<HTMLDivElement | null>(null)
@@ -78,9 +79,7 @@ export function useMessagesData({
   const updateChatMessages = useCallback(
     (
       chatId: number,
-      updater: (
-        current: ConversationMessage[]
-      ) => ConversationMessage[]
+      updater: (current: ConversationMessage[]) => ConversationMessage[]
     ) => {
       setMessagesByChat((current) => {
         const existing = current[chatId] ?? []
@@ -250,7 +249,17 @@ export function useMessagesData({
 
   const handleIncomingMessage = useCallback(
     (message: ImsgMessage) => {
-      const hasChat = chatsRef.current.some((chat) => chat.id === message.chat_id)
+      const eventId = `${message.chat_id}:${message.guid || message.id}`
+      const isReplay = seenEventIdsRef.current.has(eventId)
+      seenEventIdsRef.current.add(eventId)
+      if (seenEventIdsRef.current.size > 5_000) {
+        seenEventIdsRef.current.delete(
+          seenEventIdsRef.current.values().next().value!
+        )
+      }
+      const hasChat = chatsRef.current.some(
+        (chat) => chat.id === message.chat_id
+      )
 
       startTransition(() => {
         updateChatMessages(message.chat_id, (current) =>
@@ -269,6 +278,8 @@ export function useMessagesData({
         }
 
         if (
+          !isReplay &&
+          !message.is_reaction &&
           !message.is_from_me &&
           selectedThreadIdRef.current !== message.chat_id
         ) {
@@ -287,7 +298,8 @@ export function useMessagesData({
   )
 
   const threads = useMemo(
-    () => chats.map((chat) => buildThreadSummary(chat, unreadCounts[chat.id] ?? 0)),
+    () =>
+      chats.map((chat) => buildThreadSummary(chat, unreadCounts[chat.id] ?? 0)),
     [chats, unreadCounts]
   )
 
@@ -304,7 +316,7 @@ export function useMessagesData({
       ? null
       : (draftMatchedThread?.id ??
         (selectedThreadId != null &&
-          threads.some((thread) => thread.id === selectedThreadId)
+        threads.some((thread) => thread.id === selectedThreadId)
           ? selectedThreadId
           : (threads[0]?.id ?? null)))
 
@@ -383,7 +395,6 @@ export function useMessagesData({
     const chatId = resolvedSelectedThreadId
     let cancelled = false
     setLoadingMessagesChatId(chatId)
-
     ;(async () => {
       try {
         const nextMessages = await service.listMessages(chatId, 80)

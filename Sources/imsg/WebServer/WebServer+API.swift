@@ -15,6 +15,7 @@ extension WebServer {
     registerStaticRoutes(router: router)
 
     let api = router.group("api")
+    registerStateRoutes(api: api)
 
     api.get("chats") { request, _ -> Response in
       let limit = Self.queryInt(request: request, name: "limit") ?? 20
@@ -36,7 +37,9 @@ extension WebServer {
         // API responses always include resolved contacts for participants so that
         // clients can render group chat UIs without an additional round trip.
         let resolved = await localContactResolver.resolveMany(participants, delivery: delivery)
-        let resolvedParticipants = participants.map { resolved[$0] ?? ResolvedContact.unresolved(handle: $0) }
+        let resolvedParticipants = participants.map {
+          resolved[$0] ?? ResolvedContact.unresolved(handle: $0)
+        }
 
         payloads.append(
           ChatListPayload(
@@ -275,7 +278,9 @@ extension WebServer {
       return Self.jsonResponse(
         ContactsListResponse(
           authorization: authorization.rawValue,
-          contacts: contacts
+          contacts: contacts,
+          lastUpdatedAt: await localContactResolver.lastLoadedAt.map(CLIISO8601.format),
+          lastError: await localContactResolver.lastError
         )
       )
     }
@@ -349,7 +354,8 @@ extension WebServer {
         let preview = try await AttachmentPreviewer.previewData(for: meta)
         let sourceURL = URL(fileURLWithPath: meta.originalPath)
         let baseName = Self.displayFilename(for: meta, sourceURL: sourceURL)
-        let previewName = ((baseName as NSString).deletingPathExtension as NSString)
+        let previewName =
+          ((baseName as NSString).deletingPathExtension as NSString)
           .appendingPathExtension("png") ?? "attachment-preview.png"
 
         var headers = HTTPFields()
@@ -395,7 +401,8 @@ extension WebServer {
         return Self.errorResponse(status: .notFound, message: "attachment file missing")
       }
       guard WebServer.isInsideMessagesMediaDirectory(path: meta.originalPath) else {
-        return Self.errorResponse(status: .forbidden, message: "attachment path outside Messages directory")
+        return Self.errorResponse(
+          status: .forbidden, message: "attachment path outside Messages directory")
       }
 
       let url = URL(fileURLWithPath: meta.originalPath)
@@ -486,7 +493,8 @@ extension WebServer {
             try await writer.write(ByteBuffer(string: chunk))
           }
         } catch {
-          let err = "event: error\ndata: {\"message\":\"\(Self.escapeJSONString(String(describing: error)))\"}\n\n"
+          let err =
+            "event: error\ndata: {\"message\":\"\(Self.escapeJSONString(String(describing: error)))\"}\n\n"
           try? await writer.write(ByteBuffer(string: err))
         }
         try await writer.finish(nil)
@@ -556,7 +564,10 @@ extension WebServer {
       let json = String(data: data, encoding: .utf8) ?? "{}"
       return Response(
         status: .ok,
-        headers: HTTPFields([HTTPField(name: .contentType, value: "application/json")]),
+        headers: HTTPFields([
+          HTTPField(name: .contentType, value: "application/json"),
+          HTTPField(name: .cacheControl, value: "no-store"),
+        ]),
         body: .init(byteBuffer: ByteBuffer(string: json))
       )
     } catch {
@@ -575,64 +586,11 @@ extension WebServer {
     }
     return Response(
       status: status,
-      headers: HTTPFields([HTTPField(name: .contentType, value: "application/json")]),
+      headers: HTTPFields([
+        HTTPField(name: .contentType, value: "application/json"),
+        HTTPField(name: .cacheControl, value: "no-store"),
+      ]),
       body: .init(byteBuffer: ByteBuffer(string: json))
     )
   }
-}
-
-// MARK: - Response types
-
-struct ChatsListResponse: Codable {
-  let chats: [ChatListPayload]
-}
-
-struct MessagesListResponse: Codable {
-  let messages: [MessagePayload]
-}
-
-struct OkResponse: Codable {
-  let ok: Bool
-}
-
-struct StagedUploadResponse: Codable {
-  let upload: StagedUploadPayload
-}
-
-struct StagedUploadPayload: Codable {
-  let id: String
-  let filename: String
-  let mimeType: String
-  let totalBytes: Int64
-
-  init(upload: UploadStager.Upload) {
-    self.id = upload.id
-    self.filename = upload.filename
-    self.mimeType = upload.mimeType
-    self.totalBytes = upload.totalBytes
-  }
-
-  enum CodingKeys: String, CodingKey {
-    case id
-    case filename
-    case mimeType = "mime_type"
-    case totalBytes = "total_bytes"
-  }
-}
-
-/// Legacy response shape kept for the existing web UI. Returned only when
-/// `/api/contacts?format=map` is called.
-struct ContactsNameMapResponse: Codable {
-  let contacts: [String: String]
-}
-
-/// New default response shape for `/api/contacts`. Includes the authorization status so
-/// clients can surface an actionable error if Contacts access has not been granted yet.
-struct ContactsListResponse: Codable {
-  let authorization: String
-  let contacts: [ResolvedContact]
-}
-
-struct ContactResolveResponse: Codable {
-  let contact: ResolvedContact
 }

@@ -10,6 +10,23 @@ import {
 } from "@/lib/app-theme"
 
 describe("app theme helpers", () => {
+  it("imports current Omarchy named colors and respects explicit mode", () => {
+    const palette = parseColorsToml(`
+mode = "light"
+accent = "#8fb1d7"
+background = "#0e1720"
+foreground = "#d5ceb1"
+green = "#a7c8a5"
+cyan = "#8ecfca"
+selection = "#262e36"
+`)
+    const derived = deriveAppTheme(palette)
+    expect(derived.mode).toBe("light")
+    expect(derived.cssVariables["--message-sms"]).toBe("#a7c8a5")
+    expect(derived.cssVariables["--message-rcs"]).toBe("#8ecfca")
+    expect(palette.selectionBackground).toBe("#262e36")
+  })
+
   it("parses Omarchy-style colors.toml files", () => {
     const palette = parseColorsToml(`
 accent = "#7aa2f7"
@@ -66,7 +83,9 @@ color6 = "#449dab"
       color6: "#c8f2ff",
     })
 
-    expect(derived.cssVariables["--message-imessage-foreground"]).toBe("#000000")
+    expect(derived.cssVariables["--message-imessage-foreground"]).toBe(
+      "#000000"
+    )
     expect(derived.cssVariables["--message-sms-foreground"]).toBe("#000000")
     expect(derived.cssVariables["--message-rcs-foreground"]).toBe("#000000")
   })
@@ -80,21 +99,33 @@ color6 = "#449dab"
       color6: "#c8f2ff",
     })
 
-    expect(derived.cssVariables["--message-imessage-foreground"]).toBe("#ffffff")
+    expect(derived.cssVariables["--message-imessage-foreground"]).toBe(
+      "#ffffff"
+    )
   })
 
   it("creates friendly imported theme names from filenames", () => {
-    expect(createImportedTheme("tokyo-night.toml", parseColorsToml(`
+    expect(
+      createImportedTheme(
+        "tokyo-night.toml",
+        parseColorsToml(`
 accent = "#7aa2f7"
 foreground = "#a9b1d6"
 background = "#1a1b26"
-`)).name).toBe("Tokyo Night")
+`)
+      ).name
+    ).toBe("Tokyo Night")
 
-    expect(createImportedTheme("colors.toml", parseColorsToml(`
+    expect(
+      createImportedTheme(
+        "colors.toml",
+        parseColorsToml(`
 accent = "#7aa2f7"
 foreground = "#a9b1d6"
 background = "#1a1b26"
-`)).name).toBe("Imported Theme")
+`)
+      ).name
+    ).toBe("Imported Theme")
   })
 
   it("serializes the current palette back into a colors.toml file", () => {
@@ -138,7 +169,11 @@ background = "#1a1b26"
   })
 
   it("ships official Omarchy presets alongside the built-in classic themes", () => {
-    expect(BUILTIN_APP_THEMES.some((theme) => theme.id === "classic:night")).toBe(true)
-    expect(BUILTIN_APP_THEMES.some((theme) => theme.id === "omarchy:tokyo-night")).toBe(true)
+    expect(
+      BUILTIN_APP_THEMES.some((theme) => theme.id === "classic:night")
+    ).toBe(true)
+    expect(
+      BUILTIN_APP_THEMES.some((theme) => theme.id === "omarchy:tokyo-night")
+    ).toBe(true)
   })
 })

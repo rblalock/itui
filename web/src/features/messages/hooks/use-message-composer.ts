@@ -10,6 +10,7 @@ import { useComposerAttachments } from "@/features/messages/hooks/use-composer-a
 import { useDraftConversationMessages } from "@/features/messages/hooks/use-draft-conversation-messages"
 import { MessagesService } from "@/features/messages/services/messages-service"
 import { describeError } from "@/features/messages/utils"
+import { buildSendBatches } from "@/features/messages/send-batches"
 import type { StagedUpload } from "@/lib/imsg"
 
 type SendBatch = {
@@ -19,20 +20,6 @@ type SendBatch = {
 
 type QueuedSendBatch = SendBatch & {
   clientId: string
-}
-
-const buildSendBatches = (
-  text: string,
-  attachments: ComposerAttachment[]
-): SendBatch[] => {
-  if (attachments.length === 0) {
-    return [{ attachments: [], text }]
-  }
-
-  return attachments.map((attachment, index) => ({
-    attachments: [attachment],
-    text: index === 0 ? text : "",
-  }))
 }
 
 const conversationHandle = (conversation: ActiveConversation) =>
@@ -200,16 +187,14 @@ export function useMessageComposer({
           }
 
           const errorMessage = describeError(error)
-          queuedBatches
-            .slice(index)
-            .forEach((pendingBatch) => {
-              updateLocalMessageState(
-                conversation,
-                pendingBatch.clientId,
-                "failed",
-                errorMessage
-              )
-            })
+          queuedBatches.slice(index).forEach((pendingBatch) => {
+            updateLocalMessageState(
+              conversation,
+              pendingBatch.clientId,
+              "failed",
+              errorMessage
+            )
+          })
           setSendError(errorMessage)
           throw error
         }
@@ -240,7 +225,10 @@ export function useMessageComposer({
     const queuedBatches = batches.map((batch) => {
       const optimisticMessage = createOptimisticConversationMessage({
         attachments: batch.attachments,
-        chatId: activeConversation.kind === "thread" ? activeConversation.id : undefined,
+        chatId:
+          activeConversation.kind === "thread"
+            ? activeConversation.id
+            : undefined,
         handle: conversationHandle(activeConversation),
         text: batch.text,
       })
@@ -275,7 +263,12 @@ export function useMessageComposer({
 
   const onRetryMessage = useCallback(
     async (message: ConversationMessage) => {
-      if (!activeConversation || isSending || !message.clientId || !message.localPayload) {
+      if (
+        !activeConversation ||
+        isSending ||
+        !message.clientId ||
+        !message.localPayload
+      ) {
         return
       }
 

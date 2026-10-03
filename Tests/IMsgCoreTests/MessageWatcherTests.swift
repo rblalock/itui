@@ -63,3 +63,38 @@ func messageWatcherYieldsExistingMessages() async throws {
   let message = try await task.value
   #expect(message?.text == "hello")
 }
+
+@Test
+func messageWatcherDrainsMoreThanOneBatchWithoutAnotherDatabaseWrite() async throws {
+  let store = try WatcherTestDatabase.makeStore()
+  try store.withConnection { db in
+    for id in 2...205 {
+      try db.run(
+        "INSERT INTO message(ROWID, handle_id, text, date, is_from_me, service) VALUES (?, 1, 'batch', ?, 0, 'iMessage')",
+        id, WatcherTestDatabase.appleEpoch(Date())
+      )
+      try db.run("INSERT INTO chat_message_join(chat_id, message_id) VALUES (1, ?)", id)
+    }
+  }
+  let stream = MessageWatcher(store: store).stream(
+    sinceRowID: -1, configuration: MessageWatcherConfiguration(batchLimit: 10)
+  )
+  let count = try await withThrowingTaskGroup(of: Int.self) { group in
+    group.addTask {
+      var count = 0
+      for try await _ in stream {
+        count += 1
+        if count == 205 { return count }
+      }
+      return count
+    }
+    group.addTask {
+      try await Task.sleep(for: .seconds(5))
+      throw CocoaError(.userCancelled)
+    }
+    let count = try await group.next()!
+    group.cancelAll()
+    return count
+  }
+  #expect(count == 205)
+}

@@ -1,4 +1,4 @@
-import Contacts
+import CryptoKit
 import Foundation
 
 /// Resolves iMessage/SMS handles (phone numbers, emails) to names and avatars using the
@@ -6,7 +6,7 @@ import Foundation
 ///
 /// `ContactResolver` is an actor so it is safe to share across HTTP handlers, WebSocket
 /// streams, RPC subscriptions, and CLI commands. The first call to ``loadIfNeeded()``
-/// enumerates `CNContactStore` once and caches everything in memory; subsequent lookups
+/// enumerates `CNContactStore` and caches it until a change notification or expiry; subsequent lookups
 /// are O(1).
 ///
 /// Avatars are written lazily to an on-disk cache the first time a handle is resolved with
@@ -23,7 +23,7 @@ public actor ContactResolver {
   }
 
   /// Per-contact data indexed in memory after `loadIfNeeded()` completes.
-  struct ContactRecord: Sendable {
+  struct ContactRecord: Sendable, Equatable {
     let canonicalKey: String
     let name: String
     let initials: String
@@ -36,8 +36,21 @@ public actor ContactResolver {
   /// All lookup keys (handle, handle.lowercased(), phone suffix digits, canonical) map to the
   /// same index in `records` so that any variant of a handle resolves to the same contact.
   private var index: [String: Int] = [:]
+  struct LoadResult: Sendable {
+    let authorization: ContactAuthorizationStatus
+    let records: [ContactRecord]
+    let error: String?
+  }
+
   private var loaded = false
-  private var loadTask: Task<(ContactAuthorizationStatus, [ContactRecord]), Never>?
+  private var lastAttempt = Date.distantPast
+  private var loadTask: Task<LoadResult, Never>?
+  private var loadID: UUID?
+  private var observation: ContactChangeObservation?
+  private let fetchContacts: @Sendable () async -> LoadResult
+  public private(set) var revision = UUID().uuidString
+  public private(set) var lastLoadedAt: Date?
+  public private(set) var lastError: String?
   private var authorization: ContactAuthorizationStatus = .notDetermined
 
   /// Base directory for exported avatar images. Defaults to `~/Library/Caches/imsg/avatars`.
@@ -50,6 +63,7 @@ public actor ContactResolver {
   public init() {
     self.avatarCacheDirectory = ContactResolver.defaultAvatarCacheDirectory
     self.avatarURLBuilder = nil
+    self.fetchContacts = ContactResolver.fetchAllContacts
   }
 
   /// Use this when the caller wants a non-default avatar cache directory (tests, custom
@@ -58,6 +72,13 @@ public actor ContactResolver {
   public init(avatarCacheDirectory: URL) {
     self.avatarCacheDirectory = avatarCacheDirectory
     self.avatarURLBuilder = nil
+    self.fetchContacts = ContactResolver.fetchAllContacts
+  }
+
+  init(avatarCacheDirectory: URL, fetchContacts: @escaping @Sendable () async -> LoadResult) {
+    self.avatarCacheDirectory = avatarCacheDirectory
+    self.avatarURLBuilder = nil
+    self.fetchContacts = fetchContacts
   }
 
   // MARK: - Public API
@@ -68,26 +89,40 @@ public actor ContactResolver {
     self.avatarURLBuilder = builder
   }
 
-  /// Loads the contacts cache if not already loaded. Safe to call multiple times — only the
-  /// first call performs the actual enumeration. Permission errors are swallowed so the
-  /// rest of the app keeps working against un-resolved handles.
+  /// Coalesces concurrent reads and refreshes at least once a minute. Failed loads
+  /// retry after five seconds rather than permanently caching an empty address book.
   public func loadIfNeeded() async {
-    guard !loaded else { return }
-
-    if let loadTask {
-      let result = await loadTask.value
-      applyLoadedContactsIfNeeded(result)
+    if observation == nil {
+      observation = ContactChangeObservation { [weak self] in
+        Task { await self?.invalidate() }
+      }
+    }
+    if let loadTask, let loadID {
+      applyLoadedContacts(await loadTask.value, id: loadID)
       return
     }
+    let lifetime: TimeInterval = loaded && lastError == nil ? 60 : 5
+    guard Date().timeIntervalSince(lastAttempt) >= lifetime else { return }
 
-    let task = Task {
-      await ContactResolver.fetchAllContacts()
-    }
+    let id = UUID()
+    let fetch = fetchContacts
+    let task = Task { await fetch() }
     loadTask = task
+    loadID = id
+    lastAttempt = Date()
+    applyLoadedContacts(await task.value, id: id)
+  }
 
-    let result = await task.value
-    applyLoadedContactsIfNeeded(result)
-    loadTask = nil
+  public func invalidate() {
+    lastAttempt = .distantPast
+  }
+
+  public func refresh() async {
+    if let loadTask, let loadID {
+      applyLoadedContacts(await loadTask.value, id: loadID)
+    }
+    invalidate()
+    await loadIfNeeded()
   }
 
   /// Returns the authorization state of the Contacts store the last time it was probed.
@@ -129,7 +164,8 @@ public actor ContactResolver {
       }
     }
 
-    let avatarURL = avatarURLBuilder?(handle)
+    let baseURL = avatarURLBuilder?(handle)
+    let avatarURL = baseURL.map { "\($0)\($0.contains("?") ? "&" : "?")v=\(revision)" }
     return ResolvedContact(
       handle: handle,
       name: record.name.isEmpty ? nil : record.name,
@@ -199,14 +235,27 @@ public actor ContactResolver {
 
   // MARK: - Internals
 
-  private func applyLoadedContactsIfNeeded(
-    _ result: (ContactAuthorizationStatus, [ContactRecord])
-  ) {
-    guard !loaded else { return }
-    authorization = result.0
-    records = result.1
-    index = ContactResolver.buildIndex(records: records)
-    loaded = true
+  private func applyLoadedContacts(_ result: LoadResult, id: UUID) {
+    guard loadID == id else { return }
+    loadTask = nil
+    loadID = nil
+    lastError = result.error
+    // Keep a valid snapshot after a transient enumeration failure. Explicitly
+    // revoked access clears it so we do not serve previously permitted data.
+    if result.error == nil || result.authorization == .denied || result.authorization == .restricted
+    {
+      let nextRecords = result.records.sorted {
+        $0.canonicalKey == $1.canonicalKey ? $0.name < $1.name : $0.canonicalKey < $1.canonicalKey
+      }
+      if records != nextRecords || authorization != result.authorization {
+        revision = UUID().uuidString
+      }
+      records = nextRecords
+      index = ContactResolver.buildIndex(records: records)
+      loaded = result.error == nil
+      if loaded { lastLoadedAt = Date() }
+    }
+    authorization = result.authorization
   }
 
   private func record(for handle: String) -> ContactRecord? {
@@ -242,11 +291,12 @@ public actor ContactResolver {
       return nil
     }
 
-    let filename = "\(ContactResolver.sanitize(key: record.canonicalKey)).\(ext)"
+    let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    let filename = "\(ContactResolver.sanitize(key: record.canonicalKey))-\(digest).\(ext)"
     let url = avatarCacheDirectory.appendingPathComponent(filename)
 
     if fm.fileExists(atPath: url.path) {
-      // Already materialized. Trust the cache; we regenerate by deleting the dir.
+      // Content-addressed files cannot reuse an old image after a Contacts edit.
       return url.path
     }
 
@@ -276,7 +326,8 @@ public actor ContactResolver {
   }
 
   static func sanitize(key: String) -> String {
-    let allowed: Set<Character> = Set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+._-@")
+    let allowed: Set<Character> = Set(
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+._-@")
     var out = ""
     out.reserveCapacity(key.count)
     for ch in key {
@@ -357,106 +408,5 @@ public actor ContactResolver {
       }
     }
     return index
-  }
-
-  private static func fetchAllContacts() async -> (ContactAuthorizationStatus, [ContactRecord]) {
-    let store = CNContactStore()
-    var status = CNContactStore.authorizationStatus(for: .contacts)
-
-    if status == .notDetermined {
-      _ = await withCheckedContinuation { continuation in
-        store.requestAccess(for: .contacts) { granted, _ in
-          continuation.resume(returning: granted)
-        }
-      }
-      status = CNContactStore.authorizationStatus(for: .contacts)
-    }
-
-    let mappedStatus: ContactAuthorizationStatus
-    switch status {
-    case .notDetermined: mappedStatus = .notDetermined
-    case .restricted: mappedStatus = .restricted
-    case .denied: mappedStatus = .denied
-    case .authorized: mappedStatus = .authorized
-    @unknown default: mappedStatus = .notDetermined
-    }
-
-    let keysToFetch: [CNKeyDescriptor] = [
-      CNContactGivenNameKey as CNKeyDescriptor,
-      CNContactFamilyNameKey as CNKeyDescriptor,
-      CNContactOrganizationNameKey as CNKeyDescriptor,
-      CNContactPhoneNumbersKey as CNKeyDescriptor,
-      CNContactEmailAddressesKey as CNKeyDescriptor,
-      CNContactThumbnailImageDataKey as CNKeyDescriptor,
-      CNContactImageDataAvailableKey as CNKeyDescriptor,
-    ]
-
-    let request = CNContactFetchRequest(keysToFetch: keysToFetch)
-
-    var records: [ContactRecord] = []
-
-    do {
-      try store.enumerateContacts(with: request) { contact, _ in
-        let name = [contact.givenName, contact.familyName]
-          .filter { !$0.isEmpty }
-          .joined(separator: " ")
-        let displayName: String
-        if !name.isEmpty {
-          displayName = name
-        } else if !contact.organizationName.isEmpty {
-          displayName = contact.organizationName
-        } else {
-          displayName = ""
-        }
-        let initials = ContactResolver.computeInitials(
-          given: contact.givenName,
-          family: contact.familyName,
-          organization: contact.organizationName
-        )
-        let thumb = contact.thumbnailImageData
-        let mimeInfo = thumb.flatMap { ContactResolver.detectMime(from: $0) }
-
-        // Each contact record is emitted once per phone number and once per email address
-        // so that a handle from the Messages DB resolves deterministically to the same
-        // record regardless of which endpoint was used.
-        let phoneValues = contact.phoneNumbers.map { $0.value.stringValue }
-        let emailValues = contact.emailAddresses.map { $0.value as String }
-
-        if !phoneValues.isEmpty {
-          for raw in phoneValues {
-            let canonical = raw
-            records.append(
-              ContactRecord(
-                canonicalKey: canonical,
-                name: displayName,
-                initials: initials,
-                thumbnailData: thumb,
-                mime: mimeInfo?.mime,
-                fileExtension: mimeInfo?.ext
-              )
-            )
-          }
-        }
-
-        for email in emailValues {
-          let canonical = email.lowercased()
-          records.append(
-            ContactRecord(
-              canonicalKey: canonical,
-              name: displayName,
-              initials: initials,
-              thumbnailData: thumb,
-              mime: mimeInfo?.mime,
-              fileExtension: mimeInfo?.ext
-            )
-          )
-        }
-      }
-    } catch {
-      // Permission denied or enumeration failed — caller sees empty records + reported status.
-      return (mappedStatus, [])
-    }
-
-    return (mappedStatus, records)
   }
 }

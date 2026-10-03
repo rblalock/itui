@@ -1,3 +1,5 @@
+import { noteServerDate } from "@/lib/server-clock"
+
 export interface ResolvedContact {
   handle: string
   name?: string
@@ -18,6 +20,8 @@ export interface ContactsList {
     | "not_determined"
     | "restricted"
   contacts: ResolvedContact[]
+  last_updated_at?: string
+  last_error?: string
 }
 
 export interface ChatRow {
@@ -139,8 +143,13 @@ export class ImsgClient {
   }
 
   private async assertOk(response: Response, url: string): Promise<void> {
+    noteServerDate(response.headers.get("date"))
     if (!response.ok) {
-      throw new APIError(response.status, url, await this.errorMessage(response))
+      throw new APIError(
+        response.status,
+        url,
+        await this.errorMessage(response)
+      )
     }
   }
 
@@ -164,6 +173,12 @@ export class ImsgClient {
     }
 
     return data.chats
+  }
+
+  async refreshContacts(): Promise<void> {
+    const url = this.url("/api/contacts/refresh")
+    const response = await fetch(url, { method: "POST" })
+    await this.assertOk(response, url)
   }
 
   async listContacts(): Promise<ContactsList> {

@@ -23,6 +23,50 @@ const makeMessage = (overrides: Partial<Message> = {}): Message => ({
 })
 
 describe("conversation message reconciliation", () => {
+  it("consumes one optimistic send per server echo even across repeated snapshots", () => {
+    const first = createOptimisticConversationMessage({
+      chatId: 1,
+      handle: "+15555550123",
+      text: "Same",
+    })
+    const second = { ...first, clientId: "second", guid: "second", id: -2 }
+    const echo = makeMessage({
+      text: "Same",
+      is_from_me: true,
+      created_at: first.created_at,
+    })
+    const loaded = mergeLoadedMessages([first, second], [echo])
+    expect(loaded).toHaveLength(2)
+    expect(loaded.filter((message) => message.clientId)).toHaveLength(1)
+    expect(mergeLoadedMessages(loaded, [echo])).toHaveLength(2)
+  })
+
+  it("deduplicates history by identity and preserves legitimate repeated text", () => {
+    const first = makeMessage({
+      text: "https://example.com",
+      balloon_bundle_id: "com.apple.messages.URLBalloonProvider",
+    })
+    const second = { ...first, id: 2, guid: "second-send" }
+    expect(mergeLoadedMessages([], [first, first, second])).toHaveLength(2)
+    expect(
+      applyIncomingConversationMessage([first], { ...first, id: 999 })
+    ).toHaveLength(1)
+  })
+
+  it("does not match a new local send to an older identical message", () => {
+    const local = createOptimisticConversationMessage({
+      chatId: 1,
+      handle: "+15555550123",
+      text: "Same",
+    })
+    const earlier = makeMessage({
+      text: "Same",
+      is_from_me: true,
+      created_at: new Date(Date.parse(local.created_at) - 20_000).toISOString(),
+    })
+    expect(mergeLoadedMessages([local], [earlier])).toHaveLength(2)
+  })
+
   it("merges incoming reaction events into the target message", () => {
     const reactionEvent = makeMessage({
       created_at: "2026-04-17T12:01:00.000Z",
@@ -37,7 +81,10 @@ describe("conversation message reconciliation", () => {
       text: "",
     })
 
-    const next = applyIncomingConversationMessage([makeMessage()], reactionEvent)
+    const next = applyIncomingConversationMessage(
+      [makeMessage()],
+      reactionEvent
+    )
     const targetMessage = next.find((message) => message.guid === "message-1")
 
     expect(next).toHaveLength(2)
@@ -118,10 +165,12 @@ describe("conversation message reconciliation", () => {
     )
 
     expect(loaded).toHaveLength(2)
-    expect(loaded.some((message) => message.guid === "server-guid-1")).toBe(true)
-    expect(loaded.some((message) => message.clientId === failedCurrent.clientId)).toBe(
+    expect(loaded.some((message) => message.guid === "server-guid-1")).toBe(
       true
     )
+    expect(
+      loaded.some((message) => message.clientId === failedCurrent.clientId)
+    ).toBe(true)
   })
 
   it("keeps realtime server messages that are newer than a refresh snapshot", () => {
@@ -153,7 +202,9 @@ describe("conversation message reconciliation", () => {
     )
 
     expect(loaded).toHaveLength(2)
-    expect(loaded.some((message) => message.id === realtimeMessage.id)).toBe(true)
+    expect(loaded.some((message) => message.id === realtimeMessage.id)).toBe(
+      true
+    )
   })
 
   it("keeps chats sorted by activity while updating previews", () => {

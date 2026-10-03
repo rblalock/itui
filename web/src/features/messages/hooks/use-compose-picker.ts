@@ -1,4 +1,11 @@
-import { startTransition, useCallback, useMemo, useState } from "react"
+import {
+  startTransition,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
 
 import type { ContactsList, ResolvedContact } from "@/lib/imsg"
 import { dedupeComposeOptionsByHandle } from "@/features/messages/compose-options"
@@ -37,14 +44,15 @@ export function useComposePicker({
   const [composeQuery, setComposeQuery] = useState("")
   const [isComposeOpen, setIsComposeOpen] = useState(false)
   const [composeSessionKey, setComposeSessionKey] = useState(0)
-  const [hasLoadedContacts, setHasLoadedContacts] = useState(false)
+  const loadingContactsRef = useRef(false)
   const [isLoadingContacts, setIsLoadingContacts] = useState(false)
 
   const loadContacts = useCallback(async () => {
-    if (hasLoadedContacts || isLoadingContacts) {
+    if (loadingContactsRef.current) {
       return
     }
 
+    loadingContactsRef.current = true
     setIsLoadingContacts(true)
 
     try {
@@ -53,17 +61,25 @@ export function useComposePicker({
       startTransition(() => {
         setContacts(nextContacts.contacts)
         setContactsAuthorization(nextContacts.authorization)
-        setContactsError(null)
-        setHasLoadedContacts(true)
+        setContactsError(nextContacts.last_error ?? null)
       })
     } catch (error) {
       setContactsError(
         error instanceof Error ? error.message : "Failed to load contacts"
       )
     } finally {
+      loadingContactsRef.current = false
       setIsLoadingContacts(false)
     }
-  }, [hasLoadedContacts, isLoadingContacts, service])
+  }, [service])
+
+  useEffect(() => {
+    const refresh = () => {
+      if (isComposeOpen) void loadContacts()
+    }
+    window.addEventListener("itui:contacts-changed", refresh)
+    return () => window.removeEventListener("itui:contacts-changed", refresh)
+  }, [isComposeOpen, loadContacts])
 
   const handleOpenChange = useCallback(
     (open: boolean) => {
@@ -87,50 +103,46 @@ export function useComposePicker({
 
   const composeSearch = composeQuery.trim().toLowerCase()
 
-  const recentComposeOptions = useMemo(
-    () => {
-      const nextOptions = threads
-        .flatMap<ComposeOption>((thread) => {
-          if (thread.isGroup || !thread.primaryHandle.trim()) {
-            return []
-          }
+  const recentComposeOptions = useMemo(() => {
+    const nextOptions = threads.flatMap<ComposeOption>((thread) => {
+      if (thread.isGroup || !thread.primaryHandle.trim()) {
+        return []
+      }
 
-          const searchText = [
-            thread.title,
-            thread.primaryHandle,
-            thread.contact?.name ?? "",
-          ]
-            .join(" ")
-            .toLowerCase()
+      const searchText = [
+        thread.title,
+        thread.primaryHandle,
+        thread.contact?.name ?? "",
+      ]
+        .join(" ")
+        .toLowerCase()
 
-          if (composeSearch && !searchText.includes(composeSearch)) {
-            return []
-          }
+      if (composeSearch && !searchText.includes(composeSearch)) {
+        return []
+      }
 
-          return [
-            {
-              avatarContacts: thread.avatarContacts,
-              avatarOverflowCount: thread.avatarOverflowCount,
-              contact: thread.contact,
-              handle: thread.primaryHandle,
-              isExistingThread: true,
-              isManual: false,
-              key: `recent-${thread.id}`,
-              participantContacts: thread.participantContacts,
-              service: thread.service,
-              subtitle: thread.subtitle,
-              threadId: thread.id,
-              title: thread.title,
-            },
-          ]
-        })
+      return [
+        {
+          avatarContacts: thread.avatarContacts,
+          avatarOverflowCount: thread.avatarOverflowCount,
+          contact: thread.contact,
+          handle: thread.primaryHandle,
+          isExistingThread: true,
+          isManual: false,
+          key: `recent-${thread.id}`,
+          participantContacts: thread.participantContacts,
+          service: thread.service,
+          subtitle: thread.subtitle,
+          threadId: thread.id,
+          title: thread.title,
+        },
+      ]
+    })
 
-      return dedupeComposeOptionsByHandle(
-        rankComposeOptions(nextOptions, composeSearch)
-      ).slice(0, 8)
-    },
-    [composeSearch, threads]
-  )
+    return dedupeComposeOptionsByHandle(
+      rankComposeOptions(nextOptions, composeSearch)
+    ).slice(0, 8)
+  }, [composeSearch, threads])
 
   const recentHandleKeys = useMemo(
     () =>
@@ -140,52 +152,47 @@ export function useComposePicker({
     [recentComposeOptions]
   )
 
-  const contactComposeOptions = useMemo(
-    () => {
-      const nextOptions = contacts
-        .flatMap<ComposeOption>((contact) => {
-          const handleKey = normalizeHandle(contact.handle)
+  const contactComposeOptions = useMemo(() => {
+    const nextOptions = contacts.flatMap<ComposeOption>((contact) => {
+      const handleKey = normalizeHandle(contact.handle)
 
-          if (!handleKey || recentHandleKeys.has(handleKey)) {
-            return []
-          }
+      if (!handleKey || recentHandleKeys.has(handleKey)) {
+        return []
+      }
 
-          const searchText = [displayNameForContact(contact), contact.handle]
-            .join(" ")
-            .toLowerCase()
+      const searchText = [displayNameForContact(contact), contact.handle]
+        .join(" ")
+        .toLowerCase()
 
-          if (composeSearch && !searchText.includes(composeSearch)) {
-            return []
-          }
+      if (composeSearch && !searchText.includes(composeSearch)) {
+        return []
+      }
 
-          const existingThread = findThreadByHandle(threads, contact.handle)
+      const existingThread = findThreadByHandle(threads, contact.handle)
 
-          return [
-            {
-              avatarContacts: contact.has_avatar || contact.name
-                ? [contact]
-                : [],
-              avatarOverflowCount: 0,
-              contact,
-              handle: contact.handle,
-              isExistingThread: existingThread != null,
-              isManual: false,
-              key: `contact-${handleKey}`,
-              participantContacts: [contact],
-              service: existingThread?.service ?? draftServiceForHandle(contact.handle),
-              subtitle: contact.handle,
-              threadId: existingThread?.id,
-              title: displayNameForContact(contact),
-            },
-          ]
-        })
+      return [
+        {
+          avatarContacts: contact.has_avatar || contact.name ? [contact] : [],
+          avatarOverflowCount: 0,
+          contact,
+          handle: contact.handle,
+          isExistingThread: existingThread != null,
+          isManual: false,
+          key: `contact-${handleKey}`,
+          participantContacts: [contact],
+          service:
+            existingThread?.service ?? draftServiceForHandle(contact.handle),
+          subtitle: contact.handle,
+          threadId: existingThread?.id,
+          title: displayNameForContact(contact),
+        },
+      ]
+    })
 
-      return dedupeComposeOptionsByHandle(
-        rankComposeOptions(nextOptions, composeSearch)
-      )
-    },
-    [composeSearch, contacts, recentHandleKeys, threads]
-  )
+    return dedupeComposeOptionsByHandle(
+      rankComposeOptions(nextOptions, composeSearch)
+    )
+  }, [composeSearch, contacts, recentHandleKeys, threads])
 
   const manualComposeOption = useMemo(() => {
     const trimmed = composeQuery.trim()
@@ -194,9 +201,10 @@ export function useComposePicker({
       return null
     }
 
-    const knownOption = [...recentComposeOptions, ...contactComposeOptions].some(
-      (option) => handlesMatch(option.handle, trimmed)
-    )
+    const knownOption = [
+      ...recentComposeOptions,
+      ...contactComposeOptions,
+    ].some((option) => handlesMatch(option.handle, trimmed))
 
     if (knownOption) {
       return null

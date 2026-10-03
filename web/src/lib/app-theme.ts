@@ -1,4 +1,5 @@
 export type ThemePalette = {
+  mode?: "dark" | "light"
   accent: string
   background: string
   foreground: string
@@ -12,7 +13,7 @@ export type ThemePalette = {
   color6?: string
 }
 
-export type AppThemeGroup = "classic" | "omarchy" | "imported"
+export type AppThemeGroup = "classic" | "omarchy" | "imported" | "linked"
 
 export type AppThemePreset = {
   group: AppThemeGroup
@@ -28,6 +29,7 @@ export type DerivedAppTheme = {
 
 export const DEFAULT_APP_THEME_ID = "classic:night"
 export const IMPORTED_APP_THEME_ID = "imported:local"
+export const OMARCHY_LINKED_THEME_ID = "omarchy:linked"
 
 const REQUIRED_KEYS = new Set(["accent", "background", "foreground"])
 const HEX_COLOR = /^#[0-9a-f]{6}$/i
@@ -329,7 +331,9 @@ const OMARCHY_THEMES: AppThemePreset[] = Object.entries(OMARCHY_THEME_PALETTES)
     name: slug
       .split("-")
       .map((part) =>
-        /^\d+$/.test(part) ? part : `${part[0]?.toUpperCase() ?? ""}${part.slice(1)}`
+        /^\d+$/.test(part)
+          ? part
+          : `${part[0]?.toUpperCase() ?? ""}${part.slice(1)}`
       )
       .join(" "),
     palette,
@@ -360,6 +364,7 @@ export function createImportedTheme(
 
 export function serializeColorsToml(palette: ThemePalette) {
   const entries: [string, string | undefined][] = [
+    ["mode", palette.mode],
     ["accent", palette.accent],
     ["foreground", palette.foreground],
     ["background", palette.background],
@@ -400,14 +405,16 @@ export function parseColorsToml(contents: string): ThemePalette {
       continue
     }
 
-    const match = line.match(
-      /^([a-zA-Z0-9_]+)\s*=\s*"([^"]+)"(?:\s+#.*)?$/
-    )
+    const match = line.match(/^([a-zA-Z0-9_]+)\s*=\s*"([^"]+)"(?:\s+#.*)?$/)
     if (!match) {
       continue
     }
 
     const [, rawKey, rawValue] = match
+    if (rawKey === "mode" && (rawValue === "dark" || rawValue === "light")) {
+      values.mode = rawValue
+      continue
+    }
     if (!HEX_COLOR.test(rawValue)) {
       continue
     }
@@ -417,7 +424,10 @@ export function parseColorsToml(contents: string): ThemePalette {
       continue
     }
 
-    values[key] = rawValue.toLowerCase()
+    // Explicit legacy keys win regardless of ordering when a file has both formats.
+    if (rawKey === key || !values[key]) {
+      ;(values as Record<string, string>)[key] = rawValue.toLowerCase()
+    }
   }
 
   for (const key of REQUIRED_KEYS) {
@@ -432,22 +442,37 @@ export function parseColorsToml(contents: string): ThemePalette {
 }
 
 export function deriveAppTheme(palette: ThemePalette): DerivedAppTheme {
-  const mode = isDarkHex(palette.background) ? "dark" : "light"
+  const mode =
+    palette.mode ?? (isDarkHex(palette.background) ? "dark" : "light")
   const imessageBubble = palette.accent
   const rcsBubble = palette.color6 ?? palette.color4 ?? palette.accent
   const smsBubble = palette.color2 ?? "#34c759"
-  const imessageForeground = pickBubbleText(imessageBubble, { preferLight: true })
+  const imessageForeground = pickBubbleText(imessageBubble, {
+    preferLight: true,
+  })
   const primaryForeground = imessageForeground
   const selectionBase = palette.selectionBackground ?? palette.accent
 
   return {
     mode,
     cssVariables: {
-      "--accent": mix(palette.background, palette.accent, mode === "dark" ? 18 : 10),
+      "--accent": mix(
+        palette.background,
+        palette.accent,
+        mode === "dark" ? 18 : 10
+      ),
       "--accent-foreground": palette.foreground,
       "--background": palette.background,
-      "--border": mix(palette.background, palette.foreground, mode === "dark" ? 16 : 12),
-      "--card": mix(palette.background, palette.foreground, mode === "dark" ? 8 : 4),
+      "--border": mix(
+        palette.background,
+        palette.foreground,
+        mode === "dark" ? 16 : 12
+      ),
+      "--card": mix(
+        palette.background,
+        palette.foreground,
+        mode === "dark" ? 8 : 4
+      ),
       "--card-foreground": palette.foreground,
       "--chart-1": palette.color4 ?? palette.accent,
       "--chart-2": palette.color2 ?? palette.accent,
@@ -456,28 +481,63 @@ export function deriveAppTheme(palette: ThemePalette): DerivedAppTheme {
       "--chart-5": palette.color6 ?? palette.accent,
       "--destructive": palette.color1 ?? "#ef4444",
       "--foreground": palette.foreground,
-      "--input": mix(palette.background, palette.foreground, mode === "dark" ? 18 : 14),
+      "--input": mix(
+        palette.background,
+        palette.foreground,
+        mode === "dark" ? 18 : 14
+      ),
       "--message-imessage": imessageBubble,
       "--message-imessage-foreground": imessageForeground,
       "--message-rcs": rcsBubble,
       "--message-rcs-foreground": pickBubbleText(rcsBubble),
       "--message-sms": smsBubble,
       "--message-sms-foreground": pickBubbleText(smsBubble),
-      "--muted": mix(palette.background, palette.foreground, mode === "dark" ? 6 : 8),
-      "--muted-foreground": mix(palette.foreground, palette.background, mode === "dark" ? 26 : 38),
-      "--popover": mix(palette.background, palette.foreground, mode === "dark" ? 10 : 5),
+      "--muted": mix(
+        palette.background,
+        palette.foreground,
+        mode === "dark" ? 6 : 8
+      ),
+      "--muted-foreground": mix(
+        palette.foreground,
+        palette.background,
+        mode === "dark" ? 26 : 38
+      ),
+      "--popover": mix(
+        palette.background,
+        palette.foreground,
+        mode === "dark" ? 10 : 5
+      ),
       "--popover-foreground": palette.foreground,
       "--primary": palette.accent,
       "--primary-foreground": primaryForeground,
       "--ring": palette.accent,
-      "--secondary": mix(palette.background, palette.foreground, mode === "dark" ? 10 : 6),
+      "--secondary": mix(
+        palette.background,
+        palette.foreground,
+        mode === "dark" ? 10 : 6
+      ),
       "--secondary-foreground": palette.foreground,
-      "--selection-background": palette.selectionBackground ?? mix(palette.background, palette.accent, mode === "dark" ? 20 : 14),
-      "--selection-foreground": palette.selectionForeground ?? pickReadableText(selectionBase),
-      "--sidebar": mix(palette.background, palette.foreground, mode === "dark" ? 4 : 2),
-      "--sidebar-accent": mix(palette.background, palette.accent, mode === "dark" ? 14 : 8),
+      "--selection-background":
+        palette.selectionBackground ??
+        mix(palette.background, palette.accent, mode === "dark" ? 20 : 14),
+      "--selection-foreground":
+        palette.selectionForeground ?? pickReadableText(selectionBase),
+      "--sidebar": mix(
+        palette.background,
+        palette.foreground,
+        mode === "dark" ? 4 : 2
+      ),
+      "--sidebar-accent": mix(
+        palette.background,
+        palette.accent,
+        mode === "dark" ? 14 : 8
+      ),
       "--sidebar-accent-foreground": palette.foreground,
-      "--sidebar-border": mix(palette.background, palette.foreground, mode === "dark" ? 12 : 10),
+      "--sidebar-border": mix(
+        palette.background,
+        palette.foreground,
+        mode === "dark" ? 12 : 10
+      ),
       "--sidebar-foreground": palette.foreground,
       "--sidebar-primary": palette.accent,
       "--sidebar-primary-foreground": primaryForeground,
@@ -505,12 +565,24 @@ function fileNameToThemeName(fileName: string) {
         .split(/\s+/)
         .filter(Boolean)
         .map((part) =>
-          /^\d+$/.test(part) ? part : `${part[0]?.toUpperCase() ?? ""}${part.slice(1)}`
+          /^\d+$/.test(part)
+            ? part
+            : `${part[0]?.toUpperCase() ?? ""}${part.slice(1)}`
         )
         .join(" ")
 }
 
 function tomlKeyToPaletteKey(rawKey: string): keyof ThemePalette | null {
+  const namedKeys: Record<string, keyof ThemePalette> = {
+    red: "color1",
+    green: "color2",
+    yellow: "color3",
+    blue: "color4",
+    magenta: "color5",
+    cyan: "color6",
+    selection: "selectionBackground",
+  }
+  if (namedKeys[rawKey]) return namedKeys[rawKey]
   if (rawKey === "selection_background") {
     return "selectionBackground"
   }
@@ -578,7 +650,8 @@ function pickBubbleText(
 }
 
 function pickReadableText(background: string) {
-  return contrastRatio(background, "#ffffff") >= contrastRatio(background, "#000000")
+  return contrastRatio(background, "#ffffff") >=
+    contrastRatio(background, "#000000")
     ? "#ffffff"
     : "#000000"
 }

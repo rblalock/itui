@@ -9,12 +9,14 @@ set -euo pipefail
 #   2. itui  — the optional terminal UI client (Bun + OpenTUI)
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/R44VC0RP/itui/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/rblalock/itui/main/install.sh | bash
 #
 # Or clone and run locally:
-#   git clone https://github.com/R44VC0RP/itui.git && cd itui && ./install.sh
+#   git clone https://github.com/rblalock/itui.git && cd itui && ./install.sh
 #
 # Environment variables:
+#   ITUI_REPO_URL       Repository for new installs (default: rblalock/itui)
+#                       Existing installs pull their configured Git remote.
 #   ITUI_INSTALL_DIR    Install location (default: ~/.itui)
 #   ITUI_INSTALL_DAEMON On macOS, force the LaunchAgent prompt:
 #                         1/yes/true  → install without prompting
@@ -46,7 +48,7 @@ prepend_path "/opt/homebrew/bin"
 prepend_path "/usr/local/bin"
 prepend_path "/Applications/Tailscale.app/Contents/MacOS"
 
-REPO_URL="${ITUI_REPO_URL:-https://github.com/R44VC0RP/itui.git}"
+REPO_URL="${ITUI_REPO_URL:-https://github.com/rblalock/itui.git}"
 
 INSTALL_DIR="${ITUI_INSTALL_DIR:-$HOME/.itui}"
 

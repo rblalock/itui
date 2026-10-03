@@ -1,5 +1,10 @@
 # Repository Guidelines
 
+## Repository Ownership
+- Work from `rblalock/itui` for ongoing development, installs, and updates.
+- Keep install instructions and installer defaults pointed at this fork.
+- Existing installs pull their configured Git remote; verify `origin` on the Mac before updating it.
+
 ## Project Structure & Module Organization
 - `Sources/imsg` holds the CLI entrypoint and command wiring.
 - `Sources/IMsgCore` contains SQLite access, watchers, AppleScript send logic, and helpers.
@@ -18,7 +23,7 @@
   - open `http://127.0.0.1:13197`
   - use this when testing the bundled web app through Swift; it prevents stale browser assets
 - Installed browser runtime:
-  - recommended install/update: `curl -fsSL https://raw.githubusercontent.com/R44VC0RP/itui/main/install.sh | ITUI_INSTALL_DAEMON=1 bash`
+  - recommended install/update: `curl -fsSL https://raw.githubusercontent.com/rblalock/itui/main/install.sh | ITUI_INSTALL_DAEMON=1 bash`
   - status: `imsg service status`
   - restart: `imsg service restart`
   - logs: `imsg service logs -f`

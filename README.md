@@ -4,6 +4,9 @@ iMessage in your browser and terminal. Run the server on a Mac signed into
 Messages.app, then use the browser app or optional terminal UI from that Mac or
 from another device.
 
+This project is maintained in [rblalock/itui](https://github.com/rblalock/itui).
+Use this fork for development, installs, and updates.
+
 ## What Gets Installed
 
 - `imsg`: the macOS server. It reads `~/Library/Messages/chat.db`, serves the
@@ -25,7 +28,7 @@ http://127.0.0.1:13197
 Recommended install with the background service enabled:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/R44VC0RP/itui/main/install.sh | ITUI_INSTALL_DAEMON=1 bash
+curl -fsSL https://raw.githubusercontent.com/rblalock/itui/main/install.sh | ITUI_INSTALL_DAEMON=1 bash
 ```
 
 That command installs or updates the repo, builds `imsg`, installs the bundled
@@ -72,7 +75,7 @@ If you do not want the background service, run the installer without
 `ITUI_INSTALL_DAEMON=1` and start the server manually:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/R44VC0RP/itui/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/rblalock/itui/main/install.sh | bash
 imsg serve --host 127.0.0.1 --port 13197
 ```
 
@@ -118,6 +121,11 @@ After changing permissions, restart the background service:
 imsg service restart
 ```
 
+Local builds are signed ad hoc. After rebuilding, macOS may require you to
+remove and re-add `~/.itui/bin/imsg` in Full Disk Access because its signature
+changed. Check Contacts access through the running service or the browser's
+Settings; an SSH-launched command can have different access from the LaunchAgent.
+
 ## Service Commands
 
 Use `imsg service` for the installed background server. These commands replace
@@ -142,11 +150,27 @@ Access to `~/.itui/bin/imsg`, then run `imsg service restart`.
 Run the same installer command again:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/R44VC0RP/itui/main/install.sh | ITUI_INSTALL_DAEMON=1 bash
+curl -fsSL https://raw.githubusercontent.com/rblalock/itui/main/install.sh | ITUI_INSTALL_DAEMON=1 bash
 ```
 
 You do not need to clone the repo or run `git` for normal installs or updates.
 If a background service already exists, the installer refreshes and restarts it.
+
+For an existing installation, updates use the checkout's current Git remote.
+Check that it points to this fork:
+
+```bash
+git -C ~/.itui remote -v
+```
+
+If `origin` points to the upstream repository, switch it once before updating:
+
+```bash
+git -C ~/.itui remote set-url origin https://github.com/rblalock/itui.git
+```
+
+Then rerun the installer above. Changing the installer URL alone does not
+change an existing checkout's remote.
 
 ## Use From Another Device
 
@@ -171,6 +195,48 @@ Then open `http://127.0.0.1:13197` on the client machine.
 
 The server has no built-in auth yet. Do not bind it directly to a public
 interface.
+
+## Follow Your Omarchy Theme
+
+On your Linux desktop, clone this fork and install the theme sync integration:
+
+```bash
+git clone https://github.com/rblalock/itui.git
+cd itui
+scripts/install-omarchy-theme-sync.sh https://your-mac.your-tailnet.ts.net
+```
+
+In the browser app, open Settings and choose **Follow Omarchy** under Theme.
+This choice is per browser, so other devices can keep their own theme.
+An Omarchy launcher can also open `https://your-mac.your-tailnet.ts.net/?theme=omarchy`
+to select this mode automatically.
+
+The integration posts the current palette to the Mac after an Omarchy theme
+change. A user timer also syncs once a minute, including after login, so it
+recovers when the Mac or Tailscale was unavailable. The Mac saves the palette
+across service restarts; open browsers receive live updates. The importer
+supports both named colors such as `green` and older `color1`–`color6` keys.
+Requires Python 3.11+, systemd user services, and Omarchy's `theme-set` hook.
+
+Configuration lives in `~/.config/itui/omarchy-theme-sync.json`. To check sync:
+
+```bash
+systemctl --user status itui-theme-sync.timer
+journalctl --user -u itui-theme-sync.service -n 20
+```
+
+## Contact Freshness
+
+Names and photos come from the Mac's local Contacts database. Changes must
+reach Contacts on the Mac before itui can display them. The server refreshes
+after contact-change notifications and checks again at least once a minute
+while the app is open. Failed reads retry instead of permanently caching an
+empty address book. Open browsers refresh contact details automatically.
+
+Settings shows Contacts access and the last successful load time, and includes
+a **Refresh contacts** button. If a contact is still missing after refreshing,
+check that it exists in Contacts on the Mac and that Contacts access is granted
+to the installed `imsg` binary.
 
 ## Optional TUI
 
@@ -251,6 +317,10 @@ The HTTP API can be used by any client.
 | `GET /api/attachments/:id` | Stream attachment file |
 | `GET /api/attachments/:id/preview` | Stream a browser-safe preview |
 | `GET /api/events` | SSE stream of new messages |
+| `GET /api/theme` | Read the last published Omarchy palette |
+| `POST /api/theme` | Save a palette as JSON: `{ "name": "theme-name", "colors": { "accent": "#...", "background": "#...", "foreground": "#..." } }` |
+| `GET /api/state/events` | SSE updates for contacts and the published theme |
+| `POST /api/contacts/refresh` | Refresh the server's Contacts snapshot |
 | `POST /api/uploads` | Stage an attachment for browser send flows |
 | `POST /api/send` | Send a message |
 | `GET /debug` | Debug page for contacts and avatars |

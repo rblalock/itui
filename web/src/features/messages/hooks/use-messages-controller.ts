@@ -1,7 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { parseAsInteger, useQueryState } from "nuqs"
 
-import type { ActiveConversation, DraftConversation } from "@/features/messages/types"
+import type {
+  ActiveConversation,
+  DraftConversation,
+} from "@/features/messages/types"
 import { useComposePicker } from "@/features/messages/hooks/use-compose-picker"
 import { useMessageComposer } from "@/features/messages/hooks/use-message-composer"
 import { useMessagesData } from "@/features/messages/hooks/use-messages-data"
@@ -166,6 +169,27 @@ export function useMessagesController() {
     }
   }, [reloadChats, refreshThreadMessages, reportLoadError, selectedThreadIdRef])
 
+  const lastResyncRef = useRef(0)
+  useEffect(() => {
+    const refreshContacts = () => {
+      void resyncAfterReconnect()
+    }
+    const onFocus = () => {
+      if (!document.hidden && Date.now() - lastResyncRef.current > 10_000) {
+        lastResyncRef.current = Date.now()
+        void resyncAfterReconnect()
+      }
+    }
+    window.addEventListener("itui:contacts-changed", refreshContacts)
+    window.addEventListener("focus", onFocus)
+    document.addEventListener("visibilitychange", onFocus)
+    return () => {
+      window.removeEventListener("itui:contacts-changed", refreshContacts)
+      window.removeEventListener("focus", onFocus)
+      document.removeEventListener("visibilitychange", onFocus)
+    }
+  }, [resyncAfterReconnect])
+
   useMessagesRealtime({
     enabled: backendReachable,
     onIncomingMessage: handleIncomingMessage,
@@ -199,8 +223,8 @@ export function useMessagesController() {
     composeTarget != null &&
     draftConversationHandle != null &&
     selectedThread == null
-    ? (draftMessagesByHandle[normalizeHandle(composeTarget.handle)] ?? [])
-    : selectedThreadMessages
+      ? (draftMessagesByHandle[normalizeHandle(composeTarget.handle)] ?? [])
+      : selectedThreadMessages
 
   const activeConversationKey =
     activeConversation == null
@@ -218,7 +242,9 @@ export function useMessagesController() {
 
   const headerStatus = (() => {
     if (!activeConversation) {
-      return isLoadingChats ? "Loading conversations" : "No conversation selected"
+      return isLoadingChats
+        ? "Loading conversations"
+        : "No conversation selected"
     }
 
     if (activeConversation.kind === "draft") {
