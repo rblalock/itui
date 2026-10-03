@@ -35,20 +35,16 @@ Environment=XDG_STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
 TimeoutStartSec=10
 UNIT
 
-cat > "$CONFIG_DIR/systemd/user/itui-theme-sync.timer" <<'UNIT'
-[Unit]
-Description=Retry itui theme sync when the Mac becomes available
-
-[Timer]
-OnStartupSec=30s
-OnUnitActiveSec=1min
-
-[Install]
-WantedBy=timers.target
-UNIT
+# Remove the periodic sync from earlier installs. Only explicit theme changes
+# should publish a palette when several machines use the same Mac server.
+systemctl --user disable --now itui-theme-sync.timer 2>/dev/null || true
+python3 - "$CONFIG_DIR/systemd/user/itui-theme-sync.timer" <<'PY'
+from pathlib import Path
+import sys
+Path(sys.argv[1]).unlink(missing_ok=True)
+PY
 
 omarchy hook install theme-set "$ROOT/scripts/itui-theme-set-hook"
 systemctl --user daemon-reload
-systemctl --user enable --now itui-theme-sync.timer
 systemctl --user start itui-theme-sync.service
 echo "Theme sync installed. Select Follow Omarchy in itui's Settings → Theme."

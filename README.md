@@ -212,29 +212,24 @@ An Omarchy launcher can also open `https://your-mac.your-tailnet.ts.net/?theme=o
 to select this mode automatically.
 
 The integration posts the current palette to the Mac after an Omarchy theme
-change. A user timer also syncs once a minute, including after login, so it
-recovers when the Mac or Tailscale was unavailable. The Mac saves the palette
+change or when you reselect a theme. It runs a short background job for each
+change, with no periodic sync or polling on Linux. Installation also sends
+the current palette once. If the Mac or Tailscale is unavailable, change or
+reselect a theme when it is reachable again. The Mac saves the palette
 across service restarts; open browsers receive live updates. The importer
 supports both named colors such as `green` and older `color1`–`color6` keys.
 Requires Python 3.11+, systemd user services, and Omarchy's `theme-set` hook.
 
-The server stores one shared palette. If several Omarchy machines publish to
-the same server, the last sync wins for every browser using Follow Omarchy.
-To move theme syncing from a desktop to a laptop, disable it on the desktop:
-
-```bash
-systemctl --user disable --now itui-theme-sync.timer
-mv ~/.config/omarchy/hooks/theme-set.d/itui-theme-set-hook \
-  ~/.config/omarchy/hooks/theme-set.d/itui-theme-set-hook.sample
-```
-
-Then install the integration on the laptop using the same server URL.
+The server stores one shared palette. Install the integration on each Omarchy
+machine you use; the last published theme change wins for every browser using
+Follow Omarchy. Change or reselect a theme on the machine you are using to
+publish its palette.
 
 Configuration lives in `~/.config/itui/omarchy-theme-sync.json`. To check sync:
 
 ```bash
-systemctl --user status itui-theme-sync.timer
 journalctl --user -u itui-theme-sync.service -n 20
+systemctl --user start itui-theme-sync.service # send the current palette manually
 ```
 
 ## Contact Freshness

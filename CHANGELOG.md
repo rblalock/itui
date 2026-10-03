@@ -1,7 +1,7 @@
 # Changelog
 
 ## 0.5.1 - 2026-10-03
-- feat: follow the current Omarchy palette through a persisted theme API, live browser updates, and a Linux theme hook with retry timer
+- feat: follow the current Omarchy palette through a persisted theme API, live browser updates, and a Linux theme-set hook
 - fix: refresh Contacts after changes and on expiry, retry failed loads, and invalidate avatar caches
 - fix: reconcile text and attachments separately and match each sent message only once
 - fix: dedupe browser messages by identity and preserve distinct repeated link sends for every client

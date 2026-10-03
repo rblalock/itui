@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
-# The service reads the current palette and serializes rapid theme changes.
-exec systemctl --user start --no-block itui-theme-sync.service
+# Keep theme changes responsive; a newer change replaces any pending upload.
+exec systemctl --user restart --no-block itui-theme-sync.service
