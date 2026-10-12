@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.2 - 2026-10-12
 - fix: decode HEIC previews directly with ImageIO when Quick Look cannot generate them
 - fix: decode extended attributed-body string lengths without corrupting message text
 - fix: remove attachment object placeholders from message text and chat previews
