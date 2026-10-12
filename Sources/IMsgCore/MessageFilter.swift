@@ -4,11 +4,15 @@ public struct MessageFilter: Sendable, Equatable {
   public let participants: [String]
   public let startDate: Date?
   public let endDate: Date?
+  public let guids: [String]
 
-  public init(participants: [String] = [], startDate: Date? = nil, endDate: Date? = nil) {
+  public init(
+    participants: [String] = [], startDate: Date? = nil, endDate: Date? = nil, guids: [String] = []
+  ) {
     self.participants = participants
     self.startDate = startDate
     self.endDate = endDate
+    self.guids = guids
   }
 
   public static func fromISO(participants: [String], startISO: String?, endISO: String?) throws
@@ -26,6 +30,11 @@ public struct MessageFilter: Sendable, Equatable {
   }
 
   public func allows(_ message: Message) -> Bool {
+    if !guids.isEmpty
+      && !guids.contains(where: { $0.caseInsensitiveCompare(message.guid) == .orderedSame })
+    {
+      return false
+    }
     if let startDate, message.date < startDate { return false }
     if let endDate, message.date >= endDate { return false }
     if !participants.isEmpty {

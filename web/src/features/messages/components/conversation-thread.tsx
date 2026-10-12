@@ -1,9 +1,15 @@
 import { Badge } from "@/components/ui/badge"
 import { Spinner } from "@/components/ui/spinner"
 import { MessageCircleIcon } from "lucide-react"
-import type { RefObject } from "react"
+import { useEffect, useState, type RefObject } from "react"
 
 import { MessageContent } from "@/features/messages/components/message-content"
+import { MessageReplyPreview } from "@/features/messages/components/message-reply-preview"
+import { useReplyContext } from "@/features/messages/hooks/use-reply-context"
+import {
+  normalizeMessageGuid,
+  replyParentGuid,
+} from "@/features/messages/reply-context"
 import { ThreadAvatar } from "@/features/messages/components/thread-avatar"
 import { senderDisplayName } from "@/features/messages/thread-identity"
 import type {
@@ -46,6 +52,31 @@ export function ConversationThread({
   scrollRef: RefObject<HTMLDivElement | null>
   selectedMessages: ConversationMessage[]
 }) {
+  const chatId =
+    activeConversation?.kind === "thread" ? activeConversation.id : null
+  const replies = useReplyContext(selectedMessages, chatId)
+  const [highlighted, setHighlighted] = useState<string | null>(null)
+  useEffect(() => {
+    if (!highlighted) return
+    const timer = window.setTimeout(() => setHighlighted(null), 1800)
+    return () => window.clearTimeout(timer)
+  }, [highlighted])
+  const jumpToMessage = (guid: string) => {
+    const target = [
+      ...(scrollRef.current?.querySelectorAll<HTMLElement>(
+        "[data-message-guid]"
+      ) ?? []),
+    ].find((element) => element.dataset.messageGuid === guid)
+    if (!target) return
+    target.scrollIntoView({
+      block: "center",
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        ? "auto"
+        : "smooth",
+    })
+    target.focus({ preventScroll: true })
+    setHighlighted(guid)
+  }
   return (
     <div
       className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain bg-background"
@@ -95,7 +126,9 @@ export function ConversationThread({
             <MessageCircleIcon />
           </div>
           <div className="flex flex-col gap-1">
-            <h3 className="text-sm font-medium">Can’t load this conversation</h3>
+            <h3 className="text-sm font-medium">
+              Can’t load this conversation
+            </h3>
             <p className="text-sm text-muted-foreground">{loadError}</p>
           </div>
         </div>
@@ -123,6 +156,19 @@ export function ConversationThread({
       ) : (
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-3 px-3 py-5 sm:gap-3.5 sm:px-6 sm:py-6">
           {selectedMessages.map((message, index) => {
+            const guid = normalizeMessageGuid(message.guid)
+            const parentGuid = replyParentGuid(message)
+            const replyPreview = parentGuid ? (
+              <MessageReplyPreview
+                parent={replies.parents.get(parentGuid)}
+                onJump={
+                  replies.loaded.has(parentGuid)
+                    ? () => jumpToMessage(parentGuid)
+                    : undefined
+                }
+                onRetry={() => replies.retry(parentGuid)}
+              />
+            ) : null
             const previousMessage = selectedMessages[index - 1]
             const nextMessage = selectedMessages[index + 1]
             const showDayDivider =
@@ -130,8 +176,7 @@ export function ConversationThread({
               toDate(previousMessage.created_at).toDateString() !==
                 toDate(message.created_at).toDateString()
             const showAvatar =
-              !message.is_from_me &&
-              !sameBubbleGroup(message, previousMessage)
+              !message.is_from_me && !sameBubbleGroup(message, previousMessage)
             const showTimestamp = !sameBubbleGroup(message, nextMessage)
             const showSenderLabel =
               !message.is_from_me &&
@@ -141,7 +186,13 @@ export function ConversationThread({
 
             return (
               <div
-                className="flex flex-col gap-1.5"
+                className={cn(
+                  "flex flex-col gap-1.5 rounded-xl outline-none",
+                  highlighted === guid &&
+                    "ring-2 ring-primary ring-offset-4 ring-offset-background"
+                )}
+                data-message-guid={guid}
+                tabIndex={-1}
                 key={message.clientId ?? message.guid ?? String(message.id)}
               >
                 {showDayDivider ? (
@@ -165,6 +216,7 @@ export function ConversationThread({
                     <div className="flex max-w-[min(84vw,24rem)] flex-col items-end gap-1 sm:max-w-[72%]">
                       <MessageContent
                         message={message}
+                        replyPreview={replyPreview}
                         onRetryMessage={onRetryMessage}
                         service={activeConversation.service}
                       />
@@ -200,6 +252,7 @@ export function ConversationThread({
 
                           <MessageContent
                             message={message}
+                            replyPreview={replyPreview}
                             onRetryMessage={onRetryMessage}
                             service={activeConversation.service}
                           />

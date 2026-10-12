@@ -23,6 +23,11 @@ The default server URL is:
 http://127.0.0.1:13197
 ```
 
+The browser shows quoted context for native iMessage replies, including original
+messages older than the loaded history. Click a quote to jump to its original
+when that message is already loaded. Sending currently creates a regular message
+in the conversation; it does not create a native threaded reply.
+
 ## Install For Browser Use
 
 Recommended install with the background service enabled:
@@ -318,6 +323,7 @@ The HTTP API can be used by any client.
 | --- | --- |
 | `GET /api/chats` | List chats with resolved contacts |
 | `GET /api/chats/:id/messages` | Messages with sender contacts and attachment URLs |
+| `GET /api/chats/:id/messages?guids=...` | Look up up to 100 original messages in that conversation for reply context |
 | `GET /api/contacts` | All resolved contacts |
 | `GET /api/contacts/resolve?handle=...` | Resolve a single handle |
 | `GET /api/contacts/avatar?handle=...` | Stream avatar image |

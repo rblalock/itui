@@ -103,6 +103,7 @@ export class APIError extends Error {
 
 type MessageListOptions = {
   attachments?: boolean
+  guids?: string[]
   limit?: number
 }
 
@@ -194,7 +195,7 @@ export class ImsgClient {
 
   async listMessages(
     chatId: number,
-    { attachments = true, limit = 80 }: MessageListOptions = {}
+    { attachments = true, guids, limit = 80 }: MessageListOptions = {}
   ): Promise<Message[]> {
     const params = new URLSearchParams({
       limit: String(limit),
@@ -203,6 +204,7 @@ export class ImsgClient {
     if (!attachments) {
       params.set("attachments", "0")
     }
+    if (guids?.length) params.set("guids", guids.join(","))
 
     const url = this.url(`/api/chats/${chatId}/messages?${params}`)
     const response = await fetch(url, {

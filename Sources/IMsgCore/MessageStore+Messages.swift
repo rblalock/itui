@@ -74,6 +74,11 @@ extension MessageStore {
     var bindings: [Binding?] = [chatID]
 
     if let filter {
+      if !filter.guids.isEmpty {
+        let placeholders = Array(repeating: "?", count: filter.guids.count).joined(separator: ",")
+        sql += " AND \(guidColumn) COLLATE NOCASE IN (\(placeholders))"
+        bindings.append(contentsOf: filter.guids.map { $0 as Binding? })
+      }
       if let startDate = filter.startDate {
         sql += " AND m.date >= ?"
         bindings.append(MessageStore.appleEpoch(startDate))

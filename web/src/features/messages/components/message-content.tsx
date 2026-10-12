@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, type ReactNode } from "react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -640,10 +640,12 @@ function MessageDeliveryState({
 
 export function MessageContent({
   message,
+  replyPreview,
   onRetryMessage,
   service,
 }: {
   message: ConversationMessage
+  replyPreview?: ReactNode
   onRetryMessage: (message: ConversationMessage) => void | Promise<void>
   service: ThreadService
 }) {
@@ -672,6 +674,7 @@ export function MessageContent({
             message.is_from_me ? "items-end" : "items-start"
           )}
         >
+          {replyPreview}
           <MessageAttachments message={message} />
 
           {showBubble ? (

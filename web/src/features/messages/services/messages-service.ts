@@ -33,6 +33,20 @@ export class MessagesService {
     return this.client.listMessages(chatId, { limit })
   }
 
+  async listMessagesByGuids(
+    chatId: number,
+    guids: string[]
+  ): Promise<ImsgMessage[]> {
+    const batches: Promise<ImsgMessage[]>[] = []
+    for (let offset = 0; offset < guids.length; offset += 100) {
+      const batch = guids.slice(offset, offset + 100)
+      batches.push(
+        this.client.listMessages(chatId, { guids: batch, limit: batch.length })
+      )
+    }
+    return (await Promise.all(batches)).flat()
+  }
+
   send(options: {
     chatGuid?: string
     chatId?: number

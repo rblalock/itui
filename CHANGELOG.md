@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.3 - 2026-10-12
+- feat: show quoted context for received replies, including originals outside the loaded history
+- feat: jump to an original message already in view and briefly highlight it
+- api: look up messages by GUID within their conversation
+
 ## 0.5.2 - 2026-10-12
 - fix: decode HEIC previews directly with ImageIO when Quick Look cannot generate them
 - fix: decode extended attributed-body string lengths without corrupting message text
