@@ -81,11 +81,7 @@ function AttachmentIcon({ attachment }: { attachment: ImsgAttachment }) {
   return <FileIcon data-icon="inline-start" />
 }
 
-function AttachmentStatusBadge({
-  message,
-}: {
-  message: ConversationMessage
-}) {
+function AttachmentStatusBadge({ message }: { message: ConversationMessage }) {
   if (!message.clientId || !message.deliveryState) {
     return null
   }
@@ -103,18 +99,22 @@ function AttachmentStatusBadge({
   )
 }
 
-function MessageAttachments({
-  message,
-}: {
-  message: ConversationMessage
-}) {
+function MessageAttachments({ message }: { message: ConversationMessage }) {
   const [activeImage, setActiveImage] = useState<ImsgAttachment | null>(null)
+  const [failedImages, setFailedImages] = useState<Record<number, string>>({})
+  const previewFailed = (attachment: ImsgAttachment) => {
+    const href = attachmentDisplayHref(attachment)
+    return Boolean(href && failedImages[attachment.id] === href)
+  }
 
   if (isURLBalloonMessage(message)) {
     return null
   }
   const imageAttachments = message.attachments.filter(
-    (attachment) => attachmentKind(attachment) === "image" && !attachment.missing
+    (attachment) =>
+      attachmentKind(attachment) === "image" &&
+      !attachment.missing &&
+      !previewFailed(attachment)
   )
   const inlineVideoAttachments = message.attachments.filter(
     (attachment) =>
@@ -123,12 +123,14 @@ function MessageAttachments({
       !attachment.missing
   )
   const audioAttachments = message.attachments.filter(
-    (attachment) => attachmentKind(attachment) === "audio" && !attachment.missing
+    (attachment) =>
+      attachmentKind(attachment) === "audio" && !attachment.missing
   )
   const fileAttachments = message.attachments.filter((attachment) => {
     const kind = attachmentKind(attachment)
     return (
       attachment.missing ||
+      previewFailed(attachment) ||
       (kind === "video"
         ? !attachmentCanRenderInlineVideo(attachment)
         : kind !== "image" && kind !== "audio")
@@ -167,6 +169,12 @@ function MessageAttachments({
                     alt={attachmentTitle(attachment)}
                     className="block max-h-[22rem] w-full object-cover transition-transform duration-300 group-hover:scale-[1.015]"
                     loading="lazy"
+                    onError={() =>
+                      setFailedImages((current) => ({
+                        ...current,
+                        [attachment.id]: href,
+                      }))
+                    }
                     src={href}
                   />
 
@@ -234,7 +242,9 @@ function MessageAttachments({
                     {attachmentDetail(attachment) || "Audio attachment"}
                   </p>
                 </div>
-                {message.clientId ? <AttachmentStatusBadge message={message} /> : null}
+                {message.clientId ? (
+                  <AttachmentStatusBadge message={message} />
+                ) : null}
               </div>
 
               <audio className="mt-3 w-full" controls preload="metadata">
@@ -270,7 +280,9 @@ function MessageAttachments({
                         {attachmentDetail(attachment) || "Unavailable"}
                       </p>
                     </div>
-                    {message.clientId ? <AttachmentStatusBadge message={message} /> : null}
+                    {message.clientId ? (
+                      <AttachmentStatusBadge message={message} />
+                    ) : null}
                   </div>
                 )
               }
@@ -324,7 +336,10 @@ function MessageAttachments({
                           <Button
                             aria-label={`Download ${attachmentTitle(attachment)}`}
                             onClick={() =>
-                              downloadAttachment(href, attachmentTitle(attachment))
+                              downloadAttachment(
+                                href,
+                                attachmentTitle(attachment)
+                              )
                             }
                             size="icon-sm"
                             type="button"
@@ -354,7 +369,9 @@ function MessageAttachments({
                         {attachmentTitle(attachment)}
                       </span>
                       <span className="text-app-meta block truncate text-muted-foreground">
-                        {attachmentDetail(attachment)}
+                        {previewFailed(attachment)
+                          ? "Preview unavailable · Download original"
+                          : attachmentDetail(attachment)}
                       </span>
                     </span>
                     {message.clientId ? (
@@ -398,11 +415,7 @@ function MessageAttachments({
   )
 }
 
-function MessageReactionRail({
-  reactions,
-}: {
-  reactions: ImsgReaction[]
-}) {
+function MessageReactionRail({ reactions }: { reactions: ImsgReaction[] }) {
   const groups = groupedReactions(reactions)
 
   if (groups.length === 0) {
@@ -440,7 +453,7 @@ function LinkifiedMessageText({
   const parts = text.split(textUrlPattern)
 
   return (
-    <span className={cn("break-words [overflow-wrap:anywhere]", className)}>
+    <span className={cn("[overflow-wrap:anywhere] break-words", className)}>
       {parts.map((part, index) => {
         if (!part) {
           return null
@@ -452,7 +465,7 @@ function LinkifiedMessageText({
 
         return (
           <a
-            className="break-all font-medium underline decoration-white/45 underline-offset-3 transition-colors [overflow-wrap:anywhere] hover:decoration-current"
+            className="font-medium [overflow-wrap:anywhere] break-all underline decoration-white/45 underline-offset-3 transition-colors hover:decoration-current"
             href={part}
             key={`${part}-${index}`}
             rel="noreferrer"
@@ -499,7 +512,13 @@ function MessageActionsMenu({
   const hasFailedSend = message.clientId && message.deliveryState === "failed"
   const hasText = message.text.trim().length > 0
 
-  if (!hasText && !actionableHref && !actionableURL && !hasFailedSend && message.is_from_me) {
+  if (
+    !hasText &&
+    !actionableHref &&
+    !actionableURL &&
+    !hasFailedSend &&
+    message.is_from_me
+  ) {
     return null
   }
 
@@ -630,7 +649,9 @@ export function MessageContent({
 }) {
   const text = message.text.trim()
   const showBubble =
-    text.length > 0 || message.attachments.length === 0 || isURLBalloonMessage(message)
+    text.length > 0 ||
+    message.attachments.length === 0 ||
+    isURLBalloonMessage(message)
 
   return (
     <div
@@ -656,7 +677,7 @@ export function MessageContent({
           {showBubble ? (
             <div
               className={cn(
-                "text-app-message w-fit max-w-full rounded-[1.35rem] px-4 py-2.5 whitespace-pre-wrap [overflow-wrap:anywhere] shadow-[0_1px_0_hsl(var(--foreground)/0.02)]",
+                "text-app-message w-fit max-w-full rounded-[1.35rem] px-4 py-2.5 [overflow-wrap:anywhere] whitespace-pre-wrap shadow-[0_1px_0_hsl(var(--foreground)/0.02)]",
                 message.is_from_me
                   ? outgoingBubbleClass(service)
                   : "bg-secondary text-foreground"
@@ -671,10 +692,7 @@ export function MessageContent({
           ) : null}
         </div>
 
-        <MessageActionsMenu
-          message={message}
-          onRetryMessage={onRetryMessage}
-        />
+        <MessageActionsMenu message={message} onRetryMessage={onRetryMessage} />
       </div>
 
       <MessageReactionRail reactions={message.reactions} />

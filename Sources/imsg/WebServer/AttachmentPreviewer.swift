@@ -1,10 +1,9 @@
 import CoreGraphics
 import Foundation
+import IMsgCore
 import ImageIO
 import QuickLookThumbnailing
 import UniformTypeIdentifiers
-
-import IMsgCore
 
 enum AttachmentPreviewError: Error {
   case generationFailed
@@ -69,7 +68,14 @@ enum AttachmentPreviewer {
 
   static func previewData(for meta: AttachmentMeta) async throws -> (data: Data, mimeType: String) {
     let fileURL = URL(fileURLWithPath: meta.originalPath)
-    let image = try await generateThumbnail(for: fileURL)
+    // Decode images in this process. Quick Look's helper can fail to read
+    // protected Messages attachments even when the server has access.
+    let image: CGImage
+    if isImageAttachment(meta: meta), let decoded = imageThumbnail(for: fileURL) {
+      image = decoded
+    } else {
+      image = try await generateThumbnail(for: fileURL)
+    }
     let data = try encodePNG(image)
     return (data, UTType.png.preferredMIMEType ?? "image/png")
   }
@@ -130,6 +136,20 @@ enum AttachmentPreviewer {
 
   private static func normalized(_ value: String) -> String {
     value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+  }
+
+  private static func imageThumbnail(for fileURL: URL) -> CGImage? {
+    guard let data = try? Data(contentsOf: fileURL, options: .mappedIfSafe),
+      let source = CGImageSourceCreateWithData(data as CFData, nil)
+    else { return nil }
+    let options: [CFString: Any] = [
+      kCGImageSourceCreateThumbnailFromImageAlways: true,
+      kCGImageSourceCreateThumbnailWithTransform: true,
+      kCGImageSourceThumbnailMaxPixelSize: previewDimension,
+    ]
+    return CGImageSourceCreateThumbnailAtIndex(
+      source, CGImageSourceGetPrimaryImageIndex(source), options as CFDictionary
+    )
   }
 
   private static func generateThumbnail(for fileURL: URL) async throws -> CGImage {

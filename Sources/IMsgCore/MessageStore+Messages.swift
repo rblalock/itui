@@ -296,7 +296,7 @@ extension MessageStore {
     let threadOriginatorGUID = stringValue(row[columns.threadOriginatorGUID])
     let balloonBundleID = columns.balloonBundleID.map { stringValue(row[$0]) } ?? ""
 
-    var resolvedText = text.isEmpty ? TypedStreamParser.parseAttributedBody(body) : text
+    var resolvedText = TypedStreamParser.messageText(text, attributedBody: body)
     if isAudioMessage, let transcription = try audioTranscription(for: rowID) {
       resolvedText = transcription
     }

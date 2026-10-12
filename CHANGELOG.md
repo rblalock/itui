@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+- fix: decode HEIC previews directly with ImageIO when Quick Look cannot generate them
+- fix: decode extended attributed-body string lengths without corrupting message text
+- fix: remove attachment object placeholders from message text and chat previews
+- fix: show an original-file download when an image preview fails
+
 ## 0.5.1 - 2026-10-03
 - feat: follow the current Omarchy palette through a persisted theme API, live browser updates, and a Linux theme-set hook
 - fix: refresh Contacts after changes and on expiry, retry failed loads, and invalidate avatar caches

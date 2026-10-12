@@ -186,7 +186,7 @@ public final class MessageStore: @unchecked Sendable {
         let attachmentMimeType = stringValue(row[11])
         let body = dataValue(row[12])
         let isAudioMessage = boolValue(row[13])
-        var resolvedText = text.isEmpty ? TypedStreamParser.parseAttributedBody(body) : text
+        var resolvedText = TypedStreamParser.messageText(text, attributedBody: body)
         if isAudioMessage,
           let transcription = try audioTranscription(for: messageID),
           !transcription.isEmpty
